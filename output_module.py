@@ -74,11 +74,14 @@ class TelegramSignalPublisher:
             "losses": 0,
             "pending": 0,
             "open": 0,
+            "partial": 0,
+            "total_rr": 0.0,
         }
 
-    async def _send(self, text: str):
+    async def _send(self, text: str, reply_to_message_id: Optional[int] = None) -> Optional[int]:
         """
-        Внутренний метод отправки сообщения в Telegram
+        Внутренний метод отправки сообщения в Telegram.
+        Возвращает message_id отправленного сообщения.
         """
         payload = {
             "chat_id": self.chat_id,
@@ -86,6 +89,9 @@ class TelegramSignalPublisher:
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
         }
+        
+        if reply_to_message_id:
+            payload["reply_to_message_id"] = reply_to_message_id
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -93,8 +99,12 @@ class TelegramSignalPublisher:
                     if resp.status != 200:
                         body = await resp.text()
                         print(f"❌ Failed to send to Telegram: HTTP {resp.status} → {body}")
+                        return None
+                    data = await resp.json()
+                    return data.get("result", {}).get("message_id")
         except Exception as e:
             print(f"❌ Error sending to Telegram: {e}")
+            return None
 
     async def publish_position_opened(self, pos: TrackedPosition):
         """
@@ -112,23 +122,79 @@ class TelegramSignalPublisher:
             f"TPs: <b>{', '.join(f'{x:.5f}' for x in pos.take_profits)}</b>\n"
             f"RR: <b>{pos.rr:.2f}</b>"
         )
-        await self._send(text)
+        await self._send(text, reply_to_message_id=pos.signal_message_id)
 
-    async def publish_position_closed(self, pos: TrackedPosition, hit_tp_index: Optional[int]):
+    async def publish_tp1_hit(self, pos: TrackedPosition, tp1_rr: float):
         """
-        Сообщение о TP/SL.
+        Сообщение о достижении TP1 с рекомендацией зафиксировать часть и перенести в БУ.
+        """
+        direction_str = str(pos.direction).replace("Direction.", "").replace("DIRECTION.", "")
+        direction_emoji = "🟢" if "LONG" in direction_str else "🔴"
+
+        text = (
+            f"🎯 <b>TP1 ДОСТИГНУТ!</b>\n\n"
+            f"<b>{pos.symbol}</b> | Chain <b>{pos.chain_id}</b>\n"
+            f"Направление: {direction_emoji} <b>{direction_str}</b>\n"
+            f"Entry: <b>{pos.entry:.5f}</b>\n"
+            f"TP1: <b>{pos.take_profits[0]:.5f}</b>\n\n"
+            f"📊 <b>Результат: +{tp1_rr:.2f}R</b> (50% позиции)\n\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"💡 <b>РЕКОМЕНДАЦИЯ:</b>\n"
+            f"• Зафиксируйте 50% позиции\n"
+            f"• Стоп перенесён в безубыток ({pos.entry:.5f})\n"
+            f"• Ждём TP2: <b>{pos.take_profits[1]:.5f}</b>\n"
+            f"━━━━━━━━━━━━━━━━━━"
+        )
+        await self._send(text, reply_to_message_id=pos.signal_message_id)
+
+    async def publish_position_breakeven(self, pos: TrackedPosition):
+        """
+        Сообщение о срабатывании безубытка после TP1.
         """
         direction_str = str(pos.direction).replace("Direction.", "").replace("DIRECTION.", "")
 
+        text = (
+            f"⚪ <b>БЕЗУБЫТОК</b>\n\n"
+            f"<b>{pos.symbol}</b> | Chain <b>{pos.chain_id}</b>\n"
+            f"Направление: <b>{direction_str}</b>\n"
+            f"Entry: <b>{pos.entry:.5f}</b>\n\n"
+            f"📊 <b>Итог: +{pos.realized_rr:.2f}R</b>\n"
+            f"<i>(TP1 взят на 50%, остаток закрыт в БУ)</i>"
+        )
+        await self._send(text, reply_to_message_id=pos.signal_message_id)
+
+    async def publish_position_closed(self, pos: TrackedPosition, hit_tp_index: Optional[int]):
+        """
+        Сообщение о TP/SL с указанием RR.
+        """
+        direction_str = str(pos.direction).replace("Direction.", "").replace("DIRECTION.", "")
+
+        # Рассчитываем RR
+        original_risk = abs(pos.entry - pos.original_stop_loss) if pos.original_stop_loss else abs(pos.entry - pos.stop_loss)
+        
         if pos.outcome == "SL":
             icon = "🔴"
             outcome_text = "<b>Стоп-лосс сработал</b>"
+            rr_text = f"📊 <b>Результат: -1.00R</b>"
+        elif pos.outcome == "TP2":
+            icon = "🟢"
+            outcome_text = "<b>Take Profit 2 достигнут!</b>"
+            rr_text = f"📊 <b>Результат: +{pos.realized_rr:.2f}R</b>"
+        elif pos.outcome == "BE":
+            icon = "⚪"
+            outcome_text = "<b>Безубыток после TP1</b>"
+            rr_text = f"📊 <b>Результат: +{pos.realized_rr:.2f}R</b>"
         else:
             icon = "🟢"
             if hit_tp_index is not None:
+                tp_price = pos.take_profits[hit_tp_index] if hit_tp_index < len(pos.take_profits) else pos.entry
+                tp_distance = abs(tp_price - pos.entry)
+                achieved_rr = tp_distance / original_risk if original_risk > 0 else 0
                 outcome_text = f"<b>Take Profit {hit_tp_index + 1} достигнут!</b>"
+                rr_text = f"📊 <b>Результат: +{achieved_rr:.2f}R</b>"
             else:
                 outcome_text = "<b>Позиция закрыта</b>"
+                rr_text = f"📊 <b>Результат: +{pos.realized_rr:.2f}R</b>"
 
         text = (
             f"{icon} <b>ПОЗИЦИЯ ЗАКРЫТА</b>\n\n"
@@ -136,10 +202,11 @@ class TelegramSignalPublisher:
             f"Результат: {outcome_text}\n"
             f"Направление: <b>{direction_str}</b>\n"
             f"Entry: <b>{pos.entry:.5f}</b>\n"
-            f"SL: <b>{pos.stop_loss:.5f}</b>\n"
-            f"TPs: <b>{', '.join(f'{x:.5f}' for x in pos.take_profits)}</b>"
+            f"SL: <b>{pos.original_stop_loss:.5f}</b>\n"
+            f"TPs: <b>{', '.join(f'{x:.5f}' for x in pos.take_profits)}</b>\n\n"
+            f"{rr_text}"
         )
-        await self._send(text)
+        await self._send(text, reply_to_message_id=pos.signal_message_id)
 
     async def publish_position_cancelled(self, pos: TrackedPosition, reason: str):
         """
@@ -156,7 +223,7 @@ class TelegramSignalPublisher:
             f"SL: <b>{pos.stop_loss:.5f}</b>\n"
             f"TPs: <b>{', '.join(f'{x:.5f}' for x in pos.take_profits)}</b>"
         )
-        await self._send(text)
+        await self._send(text, reply_to_message_id=pos.signal_message_id)
 
     def _fmt_price(self, p: float) -> str:
         """Форматирует цену в зависимости от величины"""
@@ -167,9 +234,10 @@ class TelegramSignalPublisher:
         else:
             return f"{p:.6f}"
 
-    async def publish(self, signal: ChainSignal):
+    async def publish(self, signal: ChainSignal) -> Optional[int]:
         """
         Отправка нового сигнала в Telegram с русскими объяснениями.
+        Возвращает message_id для последующих reply.
         """
         # Чистим direction
         direction_str = str(signal.direction).replace("Direction.", "").replace("DIRECTION.", "").upper()
@@ -195,7 +263,7 @@ class TelegramSignalPublisher:
             tp_rr = reward / risk if risk > 0 else 0
             tp_percent = (reward / signal.entry) * 100
             tp_lines += f"  TP{i}: <b>{self._fmt_price(tp)}</b> (RR {tp_rr:.1f}x, +{tp_percent:.1f}%)\n"
-            final_rr = tp_rr  # Последний TP = финальный RR
+            final_rr = tp_rr
 
         # Emoji для направления
         dir_emoji = "🟢" if "LONG" in direction_str else "🔴"
@@ -221,7 +289,7 @@ class TelegramSignalPublisher:
 
 ⚠️ <i>1-2% риск на сделку.</i>"""
 
-        await self._send(text)
+        message_id = await self._send(text)
 
         # Увеличиваем счётчик сигналов
         self.stats["total_signals"] += 1
@@ -229,6 +297,8 @@ class TelegramSignalPublisher:
         # Обновляем закреп после нового сигнала
         if self.pinned_message_id:
             await self.update_pinned_stats()
+
+        return message_id
 
     # ==========================================
     #  ЗАКРЕПЛЁННОЕ СООБЩЕНИЕ СО СТАТИСТИКОЙ
@@ -268,22 +338,7 @@ class TelegramSignalPublisher:
 
     async def _send_and_get_id(self, text: str) -> Optional[int]:
         """Отправляет сообщение и возвращает его ID"""
-        url = f"https://api.telegram.org/bot{self.token}/sendMessage"
-        payload = {
-            "chat_id": self.chat_id,
-            "text": text,
-            "parse_mode": "HTML",
-            "disable_web_page_preview": True,
-        }
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, json=payload) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        return data.get("result", {}).get("message_id")
-        except:
-            pass
-        return None
+        return await self._send(text)
 
     async def init_pinned_message(self):
         """Создаёт и закрепляет сообщение со статистикой"""
@@ -302,18 +357,24 @@ class TelegramSignalPublisher:
         await self._edit_message(self.pinned_message_id, text)
 
     def _build_stats_message(self) -> str:
-        """Формирует текст статистики"""
+        """Формирует текст статистики с RR"""
         from datetime import datetime
         now = datetime.now()
 
         total_closed = self.stats["wins"] + self.stats["losses"]
         win_rate = f"{(self.stats['wins'] / total_closed * 100):.1f}%" if total_closed > 0 else "—"
+        
+        # Форматируем RR
+        total_rr = self.stats.get("total_rr", 0.0)
+        rr_emoji = "📈" if total_rr >= 0 else "📉"
+        rr_sign = "+" if total_rr >= 0 else ""
 
         # Список активных позиций
         pos_lines = []
         for key, pos in list(self.active_positions.items())[:10]:
             emoji = "🟢" if pos["direction"] == "LONG" else "🔴"
-            pos_lines.append(f"  {emoji} <b>{pos['symbol']}</b> @ {pos['entry']:.2f}")
+            status = "🎯" if pos.get("partial") else ""
+            pos_lines.append(f"  {emoji} <b>{pos['symbol']}</b> @ {pos['entry']:.2f} {status}")
 
         positions_text = "\n".join(pos_lines) if pos_lines else "  <i>Нет активных</i>"
 
@@ -328,11 +389,14 @@ class TelegramSignalPublisher:
   • Wins: {self.stats['wins']} ✅
   • Losses: {self.stats['losses']} ❌
 
+{rr_emoji} <b>СУММА RR: {rr_sign}{total_rr:.2f}R</b>
+
 ━━━━━━━━━━━━━━━━━━
 
 📍 <b>ОТКРЫТЫЕ</b> ({self.stats['open']})
 {positions_text}
 
+🎯 <b>ЧАСТИЧНО</b>: {self.stats.get('partial', 0)}
 ⏳ <b>ОЖИДАЮТ</b>: {self.stats['pending']}
 
 ━━━━━━━━━━━━━━━━━━
@@ -342,16 +406,19 @@ class TelegramSignalPublisher:
         """Синхронизирует статистику из position_tracker"""
         self.stats["pending"] = tracker_stats.get("pending", 0)
         self.stats["open"] = tracker_stats.get("open", 0)
+        self.stats["partial"] = tracker_stats.get("partial", 0)
         self.stats["wins"] = tracker_stats.get("closed_tp", 0)
         self.stats["losses"] = tracker_stats.get("closed_sl", 0)
+        self.stats["total_rr"] = tracker_stats.get("total_rr", 0.0)
 
-    def add_active_position(self, symbol: str, direction: str, entry: float):
+    def add_active_position(self, symbol: str, direction: str, entry: float, partial: bool = False):
         """Добавляет позицию в список активных"""
         key = f"{symbol}_{direction}_{entry}"
         self.active_positions[key] = {
             "symbol": symbol,
             "direction": direction,
-            "entry": entry
+            "entry": entry,
+            "partial": partial
         }
 
     def remove_active_position(self, symbol: str, direction: str, entry: float):

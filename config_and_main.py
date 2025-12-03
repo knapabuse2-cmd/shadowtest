@@ -1,4 +1,4 @@
-# config_and_main.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
+# config_and_main.py - ОБНОВЛЁННАЯ ВЕРСИЯ С ПОДДЕРЖКОЙ TP2, БУ, RR
 
 import asyncio
 import time
@@ -38,7 +38,7 @@ from analysis_chains import (
     Chain_2_6
 )
 
-from position_tracker import PositionTracker
+from position_tracker import PositionTracker, PositionStatus
 from signal_validator import SignalValidator
 from signal_deduplicator import SignalDeduplicator
 from analysis_interfaces import ChainSignal, Zone, DetectionResult
@@ -71,8 +71,8 @@ class EnhancedOrchestrator(Orchestrator):
 
     def __init__(self, data_source, detectors: dict, chains: list):
         super().__init__(data_source, detectors, chains)
-        self.last_detections = {}  # Сохраняем последние detections
-        self.last_candles = {}  # Сохраняем последние candles
+        self.last_detections = {}
+        self.last_candles = {}
 
     async def analyze_symbol_with_data(self, symbol: str):
         """
@@ -148,13 +148,12 @@ class EnhancedOrchestrator(Orchestrator):
             await self._log(f"✓ {symbol}: Found {total_zones} zones total", "INFO")
 
         # --------------------------------------------------------
-        # НОВОЕ: АНАЛИЗ BIAS ДЛЯ КАЖДОГО ТАЙМФРЕЙМА
+        # BIAS ANALYSIS
         # --------------------------------------------------------
 
         bias_detector = ICTBiasDetector()
         bias_contexts = {}
 
-        # Mapping для старших таймфреймов
         htf_map = {
             "15m": "1h",
             "1h": "4h",
@@ -167,11 +166,9 @@ class EnhancedOrchestrator(Orchestrator):
                 continue
 
             try:
-                # Получаем старший таймфрейм
                 htf = htf_map.get(tf)
                 htf_candles = candles.get(htf) if htf else None
 
-                # Анализируем bias
                 bias_context = bias_detector.detect_comprehensive_bias(
                     candles_current=candles[tf],
                     candles_htf=htf_candles,
@@ -182,7 +179,6 @@ class EnhancedOrchestrator(Orchestrator):
 
                 bias_contexts[tf] = bias_context
 
-                # Логируем bias для отладки
                 await self._log(
                     f"📊 {symbol} {tf} BIAS: {bias_context.bias} "
                     f"(strength: {bias_context.strength:.0f}, "
@@ -192,7 +188,6 @@ class EnhancedOrchestrator(Orchestrator):
 
             except Exception as e:
                 await self._log(f"⚠️ Bias detector failed for {symbol} {tf}: {e}", "DEBUG")
-                # Создаем нейтральный bias как fallback
                 from bias_detector import BiasContext, MarketBias
                 bias_contexts[tf] = BiasContext(
                     bias=MarketBias.NEUTRAL,
@@ -206,7 +201,7 @@ class EnhancedOrchestrator(Orchestrator):
                 )
 
         # --------------------------------------------------------
-        # RUN CHAINS С BIAS CONTEXTS
+        # RUN CHAINS
         # --------------------------------------------------------
         from analysis_interfaces import ChainContext
 
@@ -215,7 +210,6 @@ class EnhancedOrchestrator(Orchestrator):
             candles=candles,
             detections=detections,
             bias_contexts=bias_contexts,
-            # ДОБАВЛЕНО: передаем bias contexts
             log_callback=None if not self.verbose_logging else self.log_callback,
         )
 
@@ -231,7 +225,6 @@ class EnhancedOrchestrator(Orchestrator):
                 await self._log(f"❌ Chain {chain.chain_id} failed: {e}", "ERROR")
 
         if all_signals:
-            # Добавляем информацию о bias в описание сигналов
             for sig in all_signals:
                 if sig.tf in bias_contexts:
                     bias = bias_contexts[sig.tf]
@@ -243,10 +236,9 @@ class EnhancedOrchestrator(Orchestrator):
                 "INFO"
             )
 
-        # Сохраняем для последующего использования
         self.last_detections[symbol] = detections
         self.last_candles[symbol] = candles
-        self.last_bias_contexts = bias_contexts  # НОВОЕ: сохраняем bias
+        self.last_bias_contexts = bias_contexts
 
         return all_signals, detections, candles
 
@@ -259,7 +251,7 @@ class EnhancedOrchestrator(Orchestrator):
 class ConfluenceScore:
     symbol: str
     zone: Zone
-    score: float  # 0-100
+    score: float
     timeframes_aligned: List[str]
     supporting_factors: List[str]
 
@@ -278,7 +270,6 @@ class ConfluenceAnalyzer:
 
         confluence_zones = []
 
-        # Проверяем каждую зону на младшем TF
         zones_15m = detections.get("15m", DetectionResult([], None)).zones
         if not zones_15m:
             return []
@@ -288,32 +279,27 @@ class ConfluenceAnalyzer:
             aligned_tfs = ["15m"]
             factors = []
 
-            # Проверяем перекрытие с зонами старших TF
             for tf in ["1h", "4h", "1d"]:
                 if tf not in detections:
                     continue
 
                 for zone_htf in detections[tf].zones:
                     if self._zones_overlap(zone_15m, zone_htf):
-                        score += 25  # +25 за каждый TF
+                        score += 25
                         aligned_tfs.append(tf)
                         factors.append(f"{tf} {zone_htf.type}")
 
-                        # Bonus за одинаковый тип зоны
                         if zone_15m.type == zone_htf.type:
                             score += 10
                             factors.append(f"Type match on {tf}")
 
-            # Проверяем расположение относительно ключевых уровней
             if "15m" in candles and candles["15m"]:
                 current_price = candles["15m"][-1].close
 
-                # Зона у round number
                 if self._near_round_number(zone_15m):
                     score += 15
                     factors.append("Round number")
 
-                # Зона у дневного high/low
                 if "1d" in candles and candles["1d"]:
                     daily_high = max(c.high for c in candles["1d"][-1:])
                     daily_low = min(c.low for c in candles["1d"][-1:])
@@ -336,20 +322,15 @@ class ConfluenceAnalyzer:
                     )
                 )
 
-        # Сортируем по score
         return sorted(confluence_zones, key=lambda x: x.score, reverse=True)
 
     def _zones_overlap(self, z1: Zone, z2: Zone, tolerance: float = 0.001) -> bool:
-        """Проверка пересечения зон с допуском"""
         z1_expanded_high = z1.high * (1 + tolerance)
         z1_expanded_low = z1.low * (1 - tolerance)
-
         return not (z1_expanded_high < z2.low or z1_expanded_low > z2.high)
 
     def _near_round_number(self, zone: Zone) -> bool:
-        """Проверка близости к круглым числам"""
         for price in [zone.high, zone.low]:
-            # Для крипты круглые числа
             if price > 1000:
                 if price % 1000 < 50 or price % 1000 > 950:
                     return True
@@ -367,14 +348,10 @@ class ConfluenceAnalyzer:
 # ================================
 
 class PerformanceOptimizer:
-    """
-    Отслеживает эффективность каждой цепочки и оптимизирует параметры
-    """
-
     def __init__(self, data_file: str = PERFORMANCE_DATA_FILE):
         self.data_file = data_file
         self.performance_data = self._load_data()
-        self.min_samples = 30  # Минимум сделок для статистики
+        self.min_samples = 30
 
     def _load_data(self) -> Dict:
         try:
@@ -395,13 +372,10 @@ class PerformanceOptimizer:
             chain_id: str,
             symbol: str,
             tf: str,
-            outcome: str,  # "TP", "SL", "BE"
+            outcome: str,
             rr_achieved: float,
             entry_time: datetime = None
     ):
-        """
-        Обновляет статистику после закрытия позиции
-        """
         if entry_time is None:
             entry_time = datetime.now()
 
@@ -413,7 +387,6 @@ class PerformanceOptimizer:
                 "stats": {}
             }
 
-        # Сохраняем результат
         self.performance_data[key]["signals"].append({
             "timestamp": entry_time.isoformat(),
             "tf": tf,
@@ -423,32 +396,24 @@ class PerformanceOptimizer:
             "day_of_week": entry_time.weekday()
         })
 
-        # Ограничиваем историю последними 500 сигналами
         if len(self.performance_data[key]["signals"]) > 500:
             self.performance_data[key]["signals"] = self.performance_data[key]["signals"][-500:]
 
-        # Пересчитываем статистику
         self._recalculate_stats(key)
         self._save_data()
 
     def _recalculate_stats(self, key: str):
-        """
-        Пересчитывает статистику для цепочки
-        """
         signals = self.performance_data[key]["signals"]
 
         if len(signals) < 10:
             return
 
-        # Win rate
         wins = sum(1 for s in signals if s["outcome"] == "TP")
         win_rate = wins / len(signals) if signals else 0
 
-        # Средний RR
         rr_values = [s["rr_achieved"] for s in signals if s["rr_achieved"] is not None]
         avg_rr = sum(rr_values) / len(rr_values) if rr_values else 0
 
-        # Лучший таймфрейм
         tf_performance = {}
         for s in signals:
             tf = s["tf"]
@@ -458,14 +423,13 @@ class PerformanceOptimizer:
             if s["outcome"] == "TP":
                 tf_performance[tf]["wins"] += 1
 
-        best_tf = "15m"  # default
+        best_tf = "15m"
         if tf_performance:
             best_tf = max(
                 tf_performance.items(),
                 key=lambda x: x[1]["wins"] / x[1]["total"] if x[1]["total"] > 5 else 0
             )[0]
 
-        # Лучшее время суток
         hour_performance = {}
         for s in signals:
             hour = s.get("hour", 0)
@@ -481,7 +445,7 @@ class PerformanceOptimizer:
                 hour_performance.items(),
                 key=lambda x: x[1]["wins"] / x[1]["total"] if x[1]["total"] > 3 else 0,
                 reverse=True
-            )[:3]  # Top 3 часа
+            )[:3]
             best_hours = [h[0] for h in best_hours]
 
         self.performance_data[key]["stats"] = {
@@ -499,9 +463,6 @@ class PerformanceOptimizer:
             tf: str,
             current_time: datetime = None
     ) -> Tuple[bool, str]:
-        """
-        Решает, стоит ли брать сигнал на основе исторической эффективности
-        """
         key = f"{chain_id}_{symbol}"
 
         if key not in self.performance_data:
@@ -512,27 +473,20 @@ class PerformanceOptimizer:
         if not stats or stats.get("total_signals", 0) < self.min_samples:
             return True, "Insufficient data"
 
-        # Проверяем win rate
-        if stats["win_rate"] < 0.30:  # Меньше 30% - отключаем
+        if stats["win_rate"] < 0.30:
             return False, f"Low win rate: {stats['win_rate']:.1%}"
 
-        # Проверяем средний RR
-        if stats.get("avg_rr",
-                     0) < -0.5:  # Средний убыток больше 0.5R
+        if stats.get("avg_rr", 0) < -0.5:
             return False, f"Negative avg RR: {stats['avg_rr']:.2f}"
 
         return True, "OK"
 
     def get_chain_ranking(self) -> List[Tuple[str, float]]:
-        """
-        Возвращает рейтинг цепочек по эффективности
-        """
         rankings = []
 
         for key, data in self.performance_data.items():
             stats = data.get("stats", {})
             if stats and stats.get("total_signals", 0) >= 20:
-                # Формула эффективности: win_rate * avg_rr
                 score = stats["win_rate"] * max(stats.get("avg_rr", 0), 0)
                 chain_id = key.split("_")[0]
                 rankings.append((chain_id, score))
@@ -545,23 +499,11 @@ class PerformanceOptimizer:
 # ================================
 
 class CorrelationAnalyzer:
-    """
-    Отслеживает корреляцию между символами
-    """
-
     def __init__(self):
         self.correlation_matrix = {}
         self.last_update = None
 
-    def calculate_correlations(
-            self,
-            symbols: List[str],
-            data_source
-    ) -> None:
-        """
-        Рассчитывает матрицу корреляций (упрощенная версия)
-        """
-        # Хардкод известных корреляций криптовалют
+    def calculate_correlations(self, symbols: List[str], data_source) -> None:
         known_correlations = {
             "BTC/USDT_ETH/USDT": 0.85,
             "ETH/USDT_BTC/USDT": 0.85,
@@ -581,9 +523,6 @@ class CorrelationAnalyzer:
             new_signal: ChainSignal,
             active_signals: List[ChainSignal]
     ) -> Tuple[bool, str]:
-        """
-        Проверяет конфликт с активными сигналами на коррелирующих парах
-        """
         for active in active_signals:
             if active.symbol == new_signal.symbol:
                 continue
@@ -591,15 +530,10 @@ class CorrelationAnalyzer:
             key = f"{new_signal.symbol}_{active.symbol}"
             corr = self.correlation_matrix.get(key, 0)
 
-            # Высокая положительная корреляция
             if corr > 0.7:
-                # Сигналы должны быть в одном направлении
                 if new_signal.direction != active.direction:
                     return True, f"Correlation conflict with {active.symbol}"
-
-            # Высокая отрицательная корреляция
             elif corr < -0.7:
-                # Сигналы должны быть в противоположных направлениях
                 if new_signal.direction == active.direction:
                     return True, f"Inverse correlation conflict with {active.symbol}"
 
@@ -611,10 +545,6 @@ class CorrelationAnalyzer:
 # ================================
 
 class AdvancedSignalFilter:
-    """
-    Многоуровневая фильтрация сигналов
-    """
-
     def __init__(self):
         pass
 
@@ -624,47 +554,35 @@ class AdvancedSignalFilter:
             zones: List[Zone],
             candles: List
     ) -> Tuple[bool, str]:
-        """
-        УЛУЧШЕННАЯ проверка возраста зон с учетом таймфрейма
-        """
         if not candles:
             return True, "OK"
 
         current_candle_index = len(candles)
 
-        # ИСПРАВЛЕНО: Разные лимиты для разных таймфреймов
-        # Определяем максимальный возраст зоны в зависимости от TF
         tf_age_limits = {
-            "15m": 200,  # 200 свечей = ~50 часов
-            "30m": 150,  # 150 свечей = ~75 часов
-            "1h": 120,  # 120 свечей = 5 дней
-            "4h": 100,  # 100 свечей = ~16 дней
-            "1d": 50,  # 50 свечей = 50 дней
+            "15m": 200,
+            "30m": 150,
+            "1h": 120,
+            "4h": 100,
+            "1d": 50,
         }
 
-        # Берем лимит для текущего TF сигнала
         max_age = tf_age_limits.get(signal.tf, 100)
 
         for zone in zones:
             if hasattr(zone, 'candle_index') and zone.candle_index:
                 age = current_candle_index - zone.candle_index
 
-                # НОВОЕ: Учитываем таймфрейм самой зоны
                 if hasattr(zone, 'tf') and zone.tf:
-                    # Если зона со старшего TF, увеличиваем допустимый возраст
                     zone_tf_limit = tf_age_limits.get(zone.tf, 100)
-
-                    # Используем больший из двух лимитов
                     effective_limit = max(max_age, zone_tf_limit)
 
-                    # Для зон старших TF применяем множитель
                     if zone.tf in ["4h", "1d"]:
-                        effective_limit = effective_limit * 1.5  # +50% для старших TF
+                        effective_limit = effective_limit * 1.5
 
                     if age > effective_limit:
                         return False, f"Zone too old ({age} candles > {effective_limit} limit for {zone.tf})"
                 else:
-                    # Fallback на оригинальную логику
                     if age > max_age:
                         return False, f"Zone too old ({age} candles > {max_age} limit)"
 
@@ -675,13 +593,9 @@ class AdvancedSignalFilter:
             signal: ChainSignal,
             candles: List
     ) -> Tuple[bool, str]:
-        """
-        Проверяет импульс движения (простой RSI)
-        """
         if not candles or len(candles) < 20:
             return True, "OK"
 
-        # RSI calculation
         gains = []
         losses = []
 
@@ -706,7 +620,6 @@ class AdvancedSignalFilter:
             rs = avg_gain / avg_loss
             rsi = 100 - (100 / (1 + rs))
 
-        # Фильтруем экстремальные значения
         direction = str(signal.direction).upper()
         if "LONG" in direction and rsi > 75:
             return False, f"Overbought (RSI={rsi:.0f})"
@@ -720,13 +633,9 @@ class AdvancedSignalFilter:
             signal: ChainSignal,
             candles: List
     ) -> Tuple[bool, str]:
-        """
-        Проверяет волатильность (ATR)
-        """
         if not candles or len(candles) < 20:
             return True, "OK"
 
-        # Простой ATR
         trs = []
         for i in range(1, min(14, len(candles))):
             h = candles[-i].high
@@ -742,11 +651,9 @@ class AdvancedSignalFilter:
         current_price = candles[-1].close
         atr_percent = (atr / current_price) * 100
 
-        # Слишком низкая волатильность
         if atr_percent < 0.5:
             return False, f"Low volatility (ATR={atr_percent:.2f}%)"
 
-        # Слишком высокая волатильность
         if atr_percent > 5:
             return False, f"High volatility (ATR={atr_percent:.2f}%)"
 
@@ -760,7 +667,7 @@ class AdvancedSignalFilter:
 async def heartbeat(log):
     while True:
         await log("💓 Heartbeat – bot alive", to_telegram=False)
-        await asyncio.sleep(300)  # каждые 5 минут
+        await asyncio.sleep(300)
 
 
 # ================================
@@ -768,32 +675,25 @@ async def heartbeat(log):
 # ================================
 
 async def main():
-    print("🚀 Starting Smart Money bot (FIXED VERSION)")
+    print("🚀 Starting Smart Money bot (UPDATED VERSION WITH TP2/BE/RR)")
 
-    # Источник данных
     source = BinanceDataSource()
 
-    # Паблишеры
     signal_publisher = TelegramSignalPublisher(BOT_TOKEN, CHAT_ID)
     log_publisher = TelegramLogPublisher(BOT_TOKEN, LOG_CHAT_ID)
 
-    # Инициализируем закреплённое сообщение со статистикой
     await signal_publisher.init_pinned_message()
 
-    # Трекер позиций
     position_tracker = PositionTracker(publisher=signal_publisher)
     position_tracker.debug_mode = False
 
-    # Валидатор сигналов
     validator = SignalValidator()
 
-    # НОВЫЕ КОМПОНЕНТЫ
     confluence_analyzer = ConfluenceAnalyzer()
     performance_optimizer = PerformanceOptimizer()
     correlation_analyzer = CorrelationAnalyzer()
     advanced_filter = AdvancedSignalFilter()
 
-    # Функция логирования
     async def log(msg: str, to_telegram: bool = False):
         print(msg)
         if to_telegram:
@@ -802,10 +702,8 @@ async def main():
             except:
                 pass
 
-    # Запуск heartbeat
     asyncio.create_task(heartbeat(log))
 
-    # Детекторы
     detectors = {
         "OrderBlock": OrderBlockDetector(),
         "FairValueGap": FairValueGapDetector(),
@@ -814,7 +712,6 @@ async def main():
         "IDM": IDMDetector(),
     }
 
-    # Цепочки
     chains = [
         Chain_1_1(),
         Chain_1_2(),
@@ -826,22 +723,18 @@ async def main():
         Chain_2_6()
     ]
 
-    # ИСПОЛЬЗУЕМ РАСШИРЕННЫЙ ORCHESTRATOR
     orchestrator = EnhancedOrchestrator(source, detectors, chains)
     orchestrator.set_logger(log, verbose=False)
 
-    # Кеши и счетчики
-    deduplicator = SignalDeduplicator()  # Умная дедупликация
+    deduplicator = SignalDeduplicator()
     active_signals_per_symbol = {}
     cycle_count = 0
 
-    # ЗАЩИТА ОТ ДУБЛИРОВАНИЯ СИГНАЛОВ
-    last_signal_time = {}  # {symbol-direction: timestamp} для контроля частоты
-    MIN_SIGNAL_INTERVAL = 300000  # 5 минут между сигналами в одном направлении
-    MAX_SIGNALS_PER_SYMBOL = 2  # Максимум 2 активных сигнала на символ
-    signal_count_per_symbol = {}  # {symbol: count} счетчик активных сигналов
+    last_signal_time = {}
+    MIN_SIGNAL_INTERVAL = 300000
+    MAX_SIGNALS_PER_SYMBOL = 2
+    signal_count_per_symbol = {}
 
-    # Для отслеживания активных сигналов (для проверки корреляций)
     all_active_signals = []
 
     try:
@@ -853,16 +746,13 @@ async def main():
             print(f"🔎 SCAN CYCLE #{cycle_count} STARTED")
             print("=" * 50)
 
-            # Обновляем корреляции периодически
             if cycle_count % CORRELATION_UPDATE_INTERVAL == 1:
                 print("📊 Updating correlations...")
                 correlation_analyzer.calculate_correlations(SYMBOLS, source)
 
-            # Отправляем в Telegram только важное
             if cycle_count % 10 == 1:
                 await log(f"🔎 Cycle #{cycle_count} started", to_telegram=True)
 
-            # Счетчики для статистики
             total_signals = 0
             validated_signals = 0
             confluence_filtered = 0
@@ -873,46 +763,34 @@ async def main():
                 print(f"\n[{index + 1}/{len(SYMBOLS)}] Scanning {symbol}...")
                 t0 = time.time()
 
-                # ---------------------------------------
-                # 1) АНАЛИЗ СИГНАЛОВ С ПОЛУЧЕНИЕМ ДАННЫХ
-                # ---------------------------------------
                 try:
-                    # ИСПОЛЬЗУЕМ НОВЫЙ МЕТОД
                     signals, detections, candles_dict = await orchestrator.analyze_symbol_with_data(symbol)
 
                     if signals:
                         print(f"  → Found {len(signals)} raw signals")
                         total_signals += len(signals)
 
-                        # Получаем контексты для валидации
                         contexts = {}
                         for tf in TIMEFRAMES:
                             if tf in candles_dict and candles_dict[tf] and len(candles_dict[tf]) > 10:
                                 contexts[tf] = detect_market_structure(candles_dict[tf], tf)
 
-                        # ---------------------------------------
-                        # 2) ВАЛИДАЦИЯ СИГНАЛОВ
-                        # ---------------------------------------
                         valid_signals = validator.filter_signals(signals, contexts)
                         validated_signals += len(valid_signals)
 
                         if valid_signals:
                             print(f"  ✔ {len(valid_signals)} signals passed validation")
 
-                            # Считаем по цепочкам
                             for sig in valid_signals:
                                 if sig.chain_id not in signals_by_chain:
                                     signals_by_chain[sig.chain_id] = 0
                                 signals_by_chain[sig.chain_id] += 1
                         else:
-                            print(f"  âš  All signals filtered out")
+                            print(f"  ⚠ All signals filtered out")
 
                         signals = valid_signals
 
-                        # ---------------------------------------
-                        # 3) АНАЛИЗ КОНФЛЮЕНЦИИ (ТЕПЕРЬ РАБОТАЕТ)
-                        # ---------------------------------------
-                        if signals and detections:  # Теперь у нас есть detections!
+                        if signals and detections:
                             print(f"  🔍 Analyzing confluence...")
                             confluence_scores = confluence_analyzer.analyze_confluence(
                                 symbol=symbol,
@@ -920,19 +798,16 @@ async def main():
                                 candles=candles_dict
                             )
 
-                            # Фильтруем по конфлюенции
                             if confluence_scores:
                                 print(f"    Found {len(confluence_scores)} confluence zones")
                                 high_confluence_zones = [c.zone for c in confluence_scores if
                                                          c.score >= MIN_CONFLUENCE_SCORE]
 
                                 if high_confluence_zones:
-                                    print(
-                                        f"    {len(high_confluence_zones)} zones with score >= {MIN_CONFLUENCE_SCORE}")
+                                    print(f"    {len(high_confluence_zones)} zones with score >= {MIN_CONFLUENCE_SCORE}")
 
                                 filtered_by_confluence = []
                                 for sig in signals:
-                                    # Проверяем, есть ли сигнал в зоне с высокой конфлюенцией
                                     sig_in_confluence = False
                                     for zone in high_confluence_zones:
                                         if zone.low <= sig.entry <= zone.high:
@@ -947,9 +822,6 @@ async def main():
 
                                 signals = filtered_by_confluence
 
-                        # ---------------------------------------
-                        # 4) ПРОВЕРКА ПРОИЗВОДИТЕЛЬНОСТИ
-                        # ---------------------------------------
                         if signals:
                             performance_checked = []
                             for sig in signals:
@@ -968,16 +840,11 @@ async def main():
 
                             signals = performance_checked
 
-                        # ---------------------------------------
-                        # 5) РАСШИРЕННАЯ ФИЛЬТРАЦИЯ
-                        # ---------------------------------------
-                        if signals and candles_dict.get(sig.tf):
+                        if signals and candles_dict.get(signals[0].tf if signals else "15m"):
                             advanced_filtered = []
                             for sig in signals:
-                                # Получаем зоны для текущего TF
                                 current_zones = detections.get(sig.tf, DetectionResult([], None)).zones
 
-                                # Проверка возраста зон
                                 passed, reason = advanced_filter.filter_by_zone_age(
                                     sig,
                                     current_zones,
@@ -987,7 +854,6 @@ async def main():
                                     print(f"    ✗ {sig.chain_id} - {reason}")
                                     continue
 
-                                # Проверка momentum
                                 passed, reason = advanced_filter.filter_by_momentum(
                                     sig,
                                     candles_dict.get(sig.tf, [])
@@ -996,7 +862,6 @@ async def main():
                                     print(f"    ✗ {sig.chain_id} - {reason}")
                                     continue
 
-                                # Проверка волатильности
                                 passed, reason = advanced_filter.filter_by_volatility(
                                     sig,
                                     candles_dict.get(sig.tf, [])
@@ -1009,9 +874,6 @@ async def main():
 
                             signals = advanced_filtered
 
-                        # ---------------------------------------
-                        # 6) ПРОВЕРКА КОРРЕЛЯЦИЙ
-                        # ---------------------------------------
                         if signals and all_active_signals:
                             correlation_filtered = []
                             for sig in signals:
@@ -1043,9 +905,6 @@ async def main():
 
                 now_ms = int(time.time() * 1000)
 
-                # ---------------------------------------
-                # 7) ПРОВЕРКА НА КОНФЛИКТЫ С АКТИВНЫМИ ПОЗИЦИЯМИ
-                # ---------------------------------------
                 if symbol in active_signals_per_symbol and signals:
                     active_directions = active_signals_per_symbol[symbol]
                     filtered_signals = []
@@ -1057,8 +916,7 @@ async def main():
                         for active_dir in active_directions:
                             if (sig_dir in ["LONG", "BUY"] and active_dir in ["SHORT", "SELL"]) or \
                                     (sig_dir in ["SHORT", "SELL"] and active_dir in ["LONG", "BUY"]):
-                                print(
-                                    f"  âš  Skipping {sig.chain_id} {sig_dir} - active {active_dir} position exists")
+                                print(f"  ⚠ Skipping {sig.chain_id} {sig_dir} - active {active_dir} position exists")
                                 conflict = True
                                 break
 
@@ -1068,10 +926,9 @@ async def main():
                     signals = filtered_signals
 
                 # ---------------------------------------
-                # 8) РЕГИСТРАЦИЯ НОВЫХ СИГНАЛОВ
+                # РЕГИСТРАЦИЯ НОВЫХ СИГНАЛОВ С MESSAGE_ID
                 # ---------------------------------------
                 for s in signals:
-                    # Проверяем дубликат через умный дедупликатор
                     is_dup, reason = deduplicator.is_duplicate(s, tf=s.tf)
 
                     if is_dup:
@@ -1080,9 +937,11 @@ async def main():
 
                     print(f"  📨 Sending: {s.chain_id} {s.direction}")
                     try:
-                        await signal_publisher.publish(s)
+                        # ВАЖНО: Получаем message_id от publish
+                        message_id = await signal_publisher.publish(s)
                         deduplicator.register_signal(s, tf=s.tf)
-                        position_tracker.register_signal(s, now_ms)
+                        # ВАЖНО: Передаём message_id в трекер
+                        position_tracker.register_signal(s, now_ms, message_id=message_id)
                         all_active_signals.append(s)
 
                         if symbol not in active_signals_per_symbol:
@@ -1092,21 +951,17 @@ async def main():
 
                         await log(f"🏁 NEW: {s.symbol} {s.chain_id} {s.direction} RR={s.rr:.1f}", to_telegram=True)
                     except Exception as e:
-                        print(f"  âš  Failed: {e}")
+                        print(f"  ⚠ Failed: {e}")
 
-                # ---------------------------------------
-                # 9) ОБНОВЛЯЕМ СТАТУС ПОЗИЦИЙ
-                # ---------------------------------------
                 try:
                     candles_15m = await source.get_ohlcv(symbol, "15m", limit=1)
                     if candles_15m:
                         last_candle = candles_15m[-1]
                         await position_tracker.update_with_candle(symbol, last_candle)
 
-                        # Обновляем активные направления на основе открытых позиций
                         active_positions = []
                         for pos in position_tracker.positions.get(symbol, []):
-                            if pos.status.value in ["PENDING", "OPEN"]:
+                            if pos.status.value in ["PENDING", "OPEN", "PARTIAL"]:
                                 active_positions.append(pos.direction)
 
                         if active_positions:
@@ -1115,17 +970,15 @@ async def main():
                             del active_signals_per_symbol[symbol]
 
                 except Exception as e:
-                    print(f"  âš  Failed to update positions: {e}")
+                    print(f"  ⚠ Failed to update positions: {e}")
 
-                # Небольшая задержка между символами
                 await asyncio.sleep(0.1)
 
-            # Очищаем старые активные сигналы
             all_active_signals = [s for s in all_active_signals
                                   if s.symbol in active_signals_per_symbol]
 
             # ---------------------------------------
-            # 10) СТАТИСТИКА ЦИКЛА
+            # СТАТИСТИКА ЦИКЛА
             # ---------------------------------------
             total_time = time.time() - start
 
@@ -1136,7 +989,7 @@ async def main():
             print(f"• After validation: {validated_signals}")
             print(f"• Confluence filtered: {confluence_filtered}")
             print(f"• Performance filtered: {performance_filtered}")
-            print(f"• Unique cached: {deduplicator.get_stats()["active_zones"]}")
+            print(f"• Unique cached: {deduplicator.get_stats()['active_zones']}")
             print(f"• Active symbols: {len(active_signals_per_symbol)}")
 
             if signals_by_chain:
@@ -1144,37 +997,40 @@ async def main():
                 for chain_id, count in sorted(signals_by_chain.items()):
                     print(f"  • {chain_id}: {count}")
 
-            # Статистика по трекеру
             tracker_stats = position_tracker.get_stats()
 
-            # Обновляем закреплённое сообщение со статистикой
             signal_publisher.update_stats_from_tracker(tracker_stats)
 
-            # Синхронизируем активные позиции для отображения в закрепе
+            # ОБНОВЛЁННАЯ синхронизация с partial статусом
             signal_publisher.active_positions.clear()
             for sym, positions in position_tracker.positions.items():
                 for pos in positions:
-                    if pos.status.value == "OPEN":
-                        signal_publisher.add_active_position(sym, str(pos.direction), pos.entry)
+                    if pos.status in (PositionStatus.OPEN, PositionStatus.PARTIAL):
+                        is_partial = pos.status == PositionStatus.PARTIAL
+                        signal_publisher.add_active_position(
+                            sym,
+                            str(pos.direction),
+                            pos.entry,
+                            partial=is_partial
+                        )
 
-            # Обновляем закреп
             await signal_publisher.update_pinned_stats()
 
             print(f"\n📈 POSITION TRACKER:")
             print(f"• Total: {tracker_stats['total']}")
             print(f"• Pending: {tracker_stats['pending']}")
             print(f"• Open: {tracker_stats['open']}")
+            print(f"• Partial (TP1 hit): {tracker_stats['partial']}")
             print(f"• Closed TP: {tracker_stats['closed_tp']}")
             print(f"• Closed SL: {tracker_stats['closed_sl']}")
             print(f"• Cancelled: {tracker_stats['cancelled']}")
+            print(f"• Total RR: {tracker_stats['total_rr']:+.2f}R")
 
-            # Win rate если есть закрытые позиции
             total_closed = tracker_stats['closed_tp'] + tracker_stats['closed_sl']
             if total_closed > 0:
                 win_rate = (tracker_stats['closed_tp'] / total_closed) * 100
                 print(f"• Win Rate: {win_rate:.1f}%")
 
-            # Рейтинг цепочек по производительности
             if cycle_count % 50 == 0:
                 rankings = performance_optimizer.get_chain_ranking()
                 if rankings:
@@ -1182,15 +1038,15 @@ async def main():
                     for i, (chain_id, score) in enumerate(rankings[:5], 1):
                         print(f"  {i}. {chain_id}: {score:.3f}")
 
-            # Периодическая отправка статистики в Telegram
             if validated_signals > 0 or cycle_count % 20 == 0:
                 stats_msg = (
                     f"📊 Cycle #{cycle_count}\n"
                     f"Time: {total_time:.1f}s\n"
                     f"Signals: {validated_signals}\n"
                     f"Filtered: {confluence_filtered + performance_filtered}\n"
-                    f"Positions: {tracker_stats['open']} open, {tracker_stats['pending']} pending\n"
-                    f"Results: {tracker_stats['closed_tp']}✅ / {tracker_stats['closed_sl']}❌"
+                    f"Positions: {tracker_stats['open']} open, {tracker_stats['partial']} partial, {tracker_stats['pending']} pending\n"
+                    f"Results: {tracker_stats['closed_tp']}✅ / {tracker_stats['closed_sl']}❌\n"
+                    f"Total RR: {tracker_stats['total_rr']:+.2f}R"
                 )
 
                 if total_closed > 10:
@@ -1200,9 +1056,6 @@ async def main():
 
             print("=" * 50)
 
-            # ---------------------------------------
-            # 11) ОЧИСТКА СТАРЫХ ДАННЫХ
-            # ---------------------------------------
             if cycle_count % 100 == 0 and deduplicator.get_stats()["active_zones"] > 500:
                 print("🧹 Clearing old cache...")
                 deduplicator.cleanup()
@@ -1212,9 +1065,6 @@ async def main():
                 if removed > 0:
                     print(f"🧹 Removed {removed} old positions")
 
-            # ---------------------------------------
-            # 12) ОЖИДАНИЕ СЛЕДУЮЩЕГО ЦИКЛА
-            # ---------------------------------------
             next_time = start + LOOP_INTERVAL
             now = time.time()
 
@@ -1223,7 +1073,7 @@ async def main():
                 print(f"\n⏳ Next scan in {int(wait)} seconds...")
                 await asyncio.sleep(wait)
             else:
-                print("\nâš  Scan took longer than interval, starting immediately...")
+                print("\n⚠ Scan took longer than interval, starting immediately...")
 
     except KeyboardInterrupt:
         print("\n🛑 Stopping bot (KeyboardInterrupt)")
@@ -1241,15 +1091,14 @@ async def main():
         except:
             pass
 
-        # Финальная статистика
         print("\n" + "=" * 50)
         print("📊 FINAL STATISTICS:")
         final_stats = position_tracker.get_stats()
         print(f"• Total positions: {final_stats['total']}")
         print(f"• Win rate: {final_stats['closed_tp']}/{final_stats['total']}")
+        print(f"• Total RR: {final_stats['total_rr']:+.2f}R")
         print(f"• Total cycles: {cycle_count}")
 
-        # Статистика по цепочкам
         if final_stats['by_chain']:
             print("\n🔗 Performance by chain:")
             for chain_id, stats in final_stats['by_chain'].items():
@@ -1257,11 +1106,11 @@ async def main():
                     wins = stats.get('tp', 0)
                     losses = stats.get('sl', 0)
                     total = wins + losses
+                    rr = stats.get('rr', 0.0)
                     if total > 0:
                         wr = (wins / total) * 100
-                        print(f"  • {chain_id}: {wins}✅/{losses}❌ (WR: {wr:.1f}%)")
+                        print(f"  • {chain_id}: {wins}✅/{losses}❌ (WR: {wr:.1f}%, RR: {rr:+.2f})")
 
-        # Финальный рейтинг цепочек
         rankings = performance_optimizer.get_chain_ranking()
         if rankings:
             print("\n🏆 Final Chain Rankings:")
