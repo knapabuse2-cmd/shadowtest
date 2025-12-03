@@ -1,7 +1,37 @@
 import aiohttp
 from analysis_interfaces import ChainSignal
-from typing import Optional
+from typing import Optional, List
 from position_tracker import TrackedPosition
+
+# Импорт генератора графиков - приоритет chart-img.com API
+try:
+    from chart_generator_api import (
+        ChartGenerator, 
+        ChartGeneratorAPI,
+        SignalData, 
+        ZoneData, 
+        CHARTS_AVAILABLE
+    )
+    CHART_TYPE = "API"
+    print("✅ chart-img.com API charts enabled")
+except ImportError:
+    try:
+        from chart_generator_tv import (
+            ChartGenerator, 
+            SignalData, 
+            ZoneData, 
+            CHARTS_AVAILABLE
+        )
+        CHART_TYPE = "TV"
+        print("✅ TradingView Playwright charts enabled (fallback)")
+    except ImportError:
+        CHARTS_AVAILABLE = False
+        ChartGenerator = None
+        ChartGeneratorAPI = None
+        SignalData = None
+        ZoneData = None
+        CHART_TYPE = None
+        print("⚠️ Charts disabled")
 
 
 class TelegramSignalPublisher:
@@ -64,6 +94,7 @@ class TelegramSignalPublisher:
         self.token = bot_token
         self.chat_id = chat_id
         self.api_url = f"https://api.telegram.org/bot{self.token}/sendMessage"
+        self.photo_url = f"https://api.telegram.org/bot{self.token}/sendPhoto"
 
         # Для закреплённого сообщения
         self.pinned_message_id: Optional[int] = None
@@ -77,6 +108,19 @@ class TelegramSignalPublisher:
             "partial": 0,
             "total_rr": 0.0,
         }
+        
+        # Инициализация генератора графиков
+        self.chart_generator: Optional[ChartGenerator] = None
+        if CHARTS_AVAILABLE:
+            try:
+                self.chart_generator = ChartGenerator(
+                    width=1200,
+                    height=800,
+                )
+                print(f"✅ Chart generator initialized ({CHART_TYPE})")
+            except Exception as e:
+                print(f"⚠️ Chart generator init failed: {e}")
+                self.chart_generator = None
 
     async def _send(self, text: str, reply_to_message_id: Optional[int] = None) -> Optional[int]:
         """
@@ -104,6 +148,38 @@ class TelegramSignalPublisher:
                     return data.get("result", {}).get("message_id")
         except Exception as e:
             print(f"❌ Error sending to Telegram: {e}")
+            return None
+
+    async def _send_photo(
+        self, 
+        image_bytes: bytes, 
+        caption: str, 
+        reply_to_message_id: Optional[int] = None
+    ) -> Optional[int]:
+        """
+        Отправляет фото в Telegram.
+        Возвращает message_id отправленного сообщения.
+        """
+        form_data = aiohttp.FormData()
+        form_data.add_field('chat_id', self.chat_id)
+        form_data.add_field('photo', image_bytes, filename='chart.png', content_type='image/png')
+        form_data.add_field('caption', caption[:1024])  # Telegram limit
+        form_data.add_field('parse_mode', 'HTML')
+        
+        if reply_to_message_id:
+            form_data.add_field('reply_to_message_id', str(reply_to_message_id))
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(self.photo_url, data=form_data) as resp:
+                    if resp.status != 200:
+                        body = await resp.text()
+                        print(f"❌ Failed to send photo to Telegram: HTTP {resp.status} → {body}")
+                        return None
+                    data = await resp.json()
+                    return data.get("result", {}).get("message_id")
+        except Exception as e:
+            print(f"❌ Error sending photo to Telegram: {e}")
             return None
 
     async def publish_position_opened(self, pos: TrackedPosition):
@@ -300,9 +376,132 @@ class TelegramSignalPublisher:
 
         return message_id
 
-    # ==========================================
-    #  ЗАКРЕПЛЁННОЕ СООБЩЕНИЕ СО СТАТИСТИКОЙ
-    # ==========================================
+    async def publish_with_chart(
+        self, 
+        signal: ChainSignal, 
+        candles: List = None,
+        zones: List = None
+    ) -> Optional[int]:
+        """
+        Отправка сигнала С ГРАФИКОМ в Telegram.
+        
+        Для chart-img.com API candles не нужны - данные берутся с TradingView.
+        
+        Args:
+            signal: Объект сигнала
+            candles: Игнорируется для API версии
+            zones: Список зон для отрисовки
+            
+        Returns:
+            message_id для последующих reply
+        """
+        # Если график недоступен - отправляем обычное сообщение
+        if not self.chart_generator:
+            print("⚠️ Chart not available, sending text only")
+            return await self.publish(signal)
+
+        try:
+            # Получаем инфо о цепочке
+            chain_info = self.CHAIN_DESCRIPTIONS.get(signal.chain_id, {
+                "name": signal.chain_id,
+                "probability": 55,
+                "logic": "Multi-TF анализ",
+            })
+
+            # Конвертируем зоны
+            chart_zones = []
+            if zones and ZoneData:
+                for z in zones[:4]:  # Максимум 4 зоны
+                    chart_zones.append(ZoneData(
+                        low=z.low,
+                        high=z.high,
+                        zone_type=z.type,
+                    ))
+
+            # Создаём данные для графика
+            signal_data = SignalData(
+                symbol=signal.symbol,
+                tf=signal.tf,
+                direction=str(signal.direction).replace("Direction.", "").replace("DIRECTION.", "").upper(),
+                entry=float(signal.entry),
+                stop_loss=float(signal.stop_loss),
+                take_profits=[float(tp) for tp in signal.take_profits],
+                zones=chart_zones,
+                chain_name=chain_info['name'],
+                rr=float(signal.rr)
+            )
+
+            # Генерируем график
+            # API версия - асинхронная, не требует candles
+            if CHART_TYPE == "API":
+                image_bytes = await self.chart_generator.api_generator.generate(signal_data)
+            elif CHART_TYPE == "TV" and hasattr(self.chart_generator, 'tv_generator'):
+                # TradingView Playwright версия
+                image_bytes = await self.chart_generator.tv_generator.generate(candles, signal_data)
+            else:
+                # Fallback sync версия
+                image_bytes = self.chart_generator.generate(candles, signal_data)
+            
+            if not image_bytes:
+                print("⚠️ Chart generation failed, sending text only")
+                return await self.publish(signal)
+
+            # Формируем подпись для фото (сокращённая версия)
+            direction_str = str(signal.direction).replace("Direction.", "").replace("DIRECTION.", "").upper()
+            direction_ru = self.DIRECTION_RU.get(direction_str,
+                                                 f"{'🟢' if 'LONG' in direction_str else '🔴'} {direction_str}")
+
+            risk = abs(signal.entry - signal.stop_loss)
+            risk_percent = (risk / signal.entry) * 100
+
+            # TP с RR
+            tp_lines = ""
+            final_rr = 0
+            for i, tp in enumerate(signal.take_profits, start=1):
+                reward = abs(tp - signal.entry)
+                tp_rr = reward / risk if risk > 0 else 0
+                tp_lines += f"TP{i}: {self._fmt_price(tp)} ({tp_rr:.1f}R)\n"
+                final_rr = tp_rr
+
+            # Компактный caption (до 1024 символов)
+            caption = f"""<b>{signal.symbol}</b> | {signal.tf.upper()}
+{direction_ru}
+
+<b>СЕТАП:</b> {chain_info['name']}
+📊 Вероятность: <b>{chain_info['probability']}%</b>
+<i>{chain_info['logic']}</i>
+
+📍 Entry: <b>{self._fmt_price(signal.entry)}</b>
+🛑 Stop: <b>{self._fmt_price(signal.stop_loss)}</b> (-{risk_percent:.1f}%)
+🎯 {tp_lines}
+⚖️ R:R: <b>{final_rr:.1f}x</b>
+
+⚠️ <i>1-2% риск на сделку</i>"""
+
+            # Отправляем фото
+            message_id = await self._send_photo(image_bytes, caption)
+            
+            if not message_id:
+                # Fallback на текст
+                print("⚠️ Photo send failed, trying text")
+                return await self.publish(signal)
+
+            # Увеличиваем счётчик сигналов
+            self.stats["total_signals"] += 1
+
+            # Обновляем закреп
+            if self.pinned_message_id:
+                await self.update_pinned_stats()
+
+            print(f"✅ Signal with chart sent: {signal.symbol} {signal.chain_id}")
+            return message_id
+
+        except Exception as e:
+            print(f"❌ publish_with_chart error: {e}")
+            import traceback
+            traceback.print_exc()
+            # Fallback на обычный publish
+            return await self.publish(signal)
 
     async def _edit_message(self, message_id: int, text: str) -> bool:
         """Редактирует существующее сообщение"""

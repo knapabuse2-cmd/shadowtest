@@ -60,6 +60,14 @@ from config import (
    )
 
 
+# В самое начало файла после импортов
+try:
+    import mplfinance
+    import matplotlib
+    import pandas
+    print("✅ Chart libraries OK")
+except ImportError as e:
+    print(f"❌ Chart libraries error: {e}")
 # ================================
 #   ENHANCED ORCHESTRATOR
 # ================================
@@ -926,7 +934,7 @@ async def main():
                     signals = filtered_signals
 
                 # ---------------------------------------
-                # РЕГИСТРАЦИЯ НОВЫХ СИГНАЛОВ С MESSAGE_ID
+                # РЕГИСТРАЦИЯ НОВЫХ СИГНАЛОВ С ГРАФИКОМ И MESSAGE_ID
                 # ---------------------------------------
                 for s in signals:
                     is_dup, reason = deduplicator.is_duplicate(s, tf=s.tf)
@@ -937,8 +945,36 @@ async def main():
 
                     print(f"  📨 Sending: {s.chain_id} {s.direction}")
                     try:
-                        # ВАЖНО: Получаем message_id от publish
-                        message_id = await signal_publisher.publish(s)
+                        # Собираем зоны со всех таймфреймов для графика
+                        all_zones = []
+                        for tf_key, det in detections.items():
+                            if det and det.zones:
+                                all_zones.extend(det.zones)
+                        
+                        # Используем свечи таймфрейма сигнала для графика
+                        chart_candles = candles_dict.get(s.tf, [])
+                        
+                        # Фильтруем зоны - оставляем только релевантные для текущей цены
+                        if chart_candles:
+                            current_price = chart_candles[-1].close
+                            price_range = current_price * 0.05  # ±5% от текущей цены
+                            filtered_zones = [
+                                z for z in all_zones 
+                                if abs(z.low - current_price) <= price_range or 
+                                   abs(z.high - current_price) <= price_range
+                            ]
+                            # Ограничиваем количество зон на графике
+                            filtered_zones = filtered_zones[:8]
+                        else:
+                            filtered_zones = all_zones[:8]
+                        
+                        # ВАЖНО: Получаем message_id от publish_with_chart
+                        message_id = await signal_publisher.publish_with_chart(
+                            s, 
+                            chart_candles, 
+                            filtered_zones
+                        )
+                        
                         deduplicator.register_signal(s, tf=s.tf)
                         # ВАЖНО: Передаём message_id в трекер
                         position_tracker.register_signal(s, now_ms, message_id=message_id)
@@ -952,6 +988,8 @@ async def main():
                         await log(f"🏁 NEW: {s.symbol} {s.chain_id} {s.direction} RR={s.rr:.1f}", to_telegram=True)
                     except Exception as e:
                         print(f"  ⚠ Failed: {e}")
+                        import traceback
+                        traceback.print_exc()
 
                 try:
                     candles_15m = await source.get_ohlcv(symbol, "15m", limit=1)
