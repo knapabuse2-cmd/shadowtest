@@ -1,171 +1,149 @@
-# advanced_filter.py - ИСПРАВЛЕННАЯ ВЕРСИЯ СО ВСЕМИ МЕТОДАМИ
+# advanced_filter.py
+# ИСПРАВЛЕНО: Убраны проверки несуществующих атрибутов
 
-from typing import Dict, Tuple
-from analysis_interfaces import ChainSignal
+from typing import Dict, Tuple, List
+from analysis_interfaces import ChainSignal, Zone
 
 
-class AdvancedFilter:  # Переименовано для соответствия импортам
+class AdvancedSignalFilter:
     """
     Многоуровневая фильтрация сигналов
-    Альтернативное имя класса для совместимости
     """
 
     def __init__(self):
-        pass  # Упрощенная инициализация
+        pass
 
-    def check_signal(self, signal: ChainSignal, candles: Dict, detections: Dict) -> Tuple[bool, str]:
-        """
-        Основной метод проверки сигнала
-        """
-        # Проверка времени
-        time_check = self._filter_by_time_consistency(signal, candles, detections)
-        if not time_check[0]:
-            return time_check
-
-        # Проверка качества зоны
-        zone_check = self._filter_by_zone_quality(signal, candles, detections)
-        if not zone_check[0]:
-            return zone_check
-
-        # Проверка моментума
-        momentum_check = self._filter_by_momentum(signal, candles)
-        if not momentum_check[0]:
-            return momentum_check
-
-        return True, "All checks passed"
-
-    def _filter_by_time_consistency(
+    def filter_by_zone_age(
             self,
             signal: ChainSignal,
-            candles: Dict,
-            detections: Dict
+            zones: List[Zone],
+            candles: List
     ) -> Tuple[bool, str]:
         """
-        Проверяет, что зоны не слишком старые
+        ИСПРАВЛЕННАЯ проверка возраста зон.
+        Проверяет candle_index зоны, не несуществующий атрибут signal.zone
         """
-        # Получаем таймфрейм сигнала
-        tf = signal.tf if hasattr(signal, 'tf') else "15m"
+        if not candles:
+            return True, "OK"
 
-        # Проверяем возраст зоны
-        if signal.zone and hasattr(signal.zone, 'age'):
-            if signal.zone.age > 50:
-                return False, "Zone too old (>50 candles)"
+        current_candle_index = len(candles)
 
-        return True, "Time consistency OK"
+        # Лимиты возраста по таймфреймам
+        tf_age_limits = {
+            "15m": 200,  # 200 свечей = ~50 часов
+            "30m": 150,
+            "1h": 120,   # 120 свечей = 5 дней
+            "4h": 100,   # 100 свечей = ~16 дней
+            "1d": 50,    # 50 свечей = 50 дней
+        }
 
-    def _filter_by_zone_quality(
+        max_age = tf_age_limits.get(signal.tf, 100)
+
+        # Проверяем возраст зон, переданных как параметр
+        for zone in zones:
+            if hasattr(zone, 'candle_index') and zone.candle_index is not None:
+                age = current_candle_index - zone.candle_index
+
+                # Учитываем таймфрейм зоны
+                if hasattr(zone, 'tf') and zone.tf:
+                    zone_tf_limit = tf_age_limits.get(zone.tf, 100)
+                    effective_limit = max(max_age, zone_tf_limit)
+
+                    # Для старших TF увеличиваем лимит
+                    if zone.tf in ["4h", "1d"]:
+                        effective_limit = int(effective_limit * 1.5)
+
+                    if age > effective_limit:
+                        return False, f"Zone too old ({age} candles > {effective_limit} limit for {zone.tf})"
+                else:
+                    if age > max_age:
+                        return False, f"Zone too old ({age} candles > {max_age} limit)"
+
+        return True, "OK"
+
+    def filter_by_momentum(
             self,
             signal: ChainSignal,
-            candles: Dict,
-            detections: Dict
+            candles: List
     ) -> Tuple[bool, str]:
         """
-        Проверяет качество зоны (чистота, количество касаний)
+        Проверяет импульс движения (простой RSI-like)
         """
-        if not signal.zone:
-            return True, "No zone to check"
+        if not candles or len(candles) < 20:
+            return True, "OK"
 
-        # Получаем свечи для таймфрейма сигнала
-        tf = signal.tf if hasattr(signal, 'tf') else "15m"
-        tf_candles = candles.get(tf, [])
-
-        if not tf_candles:
-            return True, "No candles for zone check"
-
-        # Считаем касания зоны
-        touches = 0
-        for candle in tf_candles[-20:]:  # Последние 20 свечей
-            if candle.low <= signal.zone.high and candle.high >= signal.zone.low:
-                touches += 1
-
-        if touches > 3:
-            return False, f"Zone tested too many times ({touches} > 3)"
-
-        if touches == 0:
-            return False, "Zone never tested"
-
-        return True, "Zone quality OK"
-
-    def _filter_by_momentum(
-            self,
-            signal: ChainSignal,
-            candles: Dict
-    ) -> Tuple[bool, str]:
-        """
-        Проверяет импульс движения (RSI-like)
-        """
-        # Получаем свечи для основного таймфрейма
-        tf = signal.tf if hasattr(signal, 'tf') else "15m"
-        tf_candles = candles.get(tf, [])
-
-        if len(tf_candles) < 20:
-            return True, "Not enough candles for momentum check"
-
-        # Расчет RSI-подобного индикатора
+        # RSI calculation
         gains = []
         losses = []
 
-        for i in range(1, min(15, len(tf_candles))):
-            try:
-                change = tf_candles[-i].close - tf_candles[-i - 1].close
-                if change > 0:
-                    gains.append(change)
-                    losses.append(0)
-                else:
-                    gains.append(0)
-                    losses.append(abs(change))
-            except:
-                continue
+        for i in range(1, min(15, len(candles))):
+            if i >= len(candles):
+                break
+            change = candles[-i].close - candles[-i - 1].close
+            if change > 0:
+                gains.append(change)
+            else:
+                losses.append(abs(change))
 
-        if not gains or not losses:
-            return True, "Cannot calculate momentum"
+        if not gains and not losses:
+            return True, "OK"
 
         avg_gain = sum(gains) / len(gains) if gains else 0
-        avg_loss = sum(losses) / len(losses) if losses else 0
+        avg_loss = sum(losses) / len(losses) if losses else 1e-10
 
         if avg_loss == 0:
-            momentum = 100
+            rsi = 100
         else:
             rs = avg_gain / avg_loss
-            momentum = 100 - (100 / (1 + rs))
+            rsi = 100 - (100 / (1 + rs))
 
         # Фильтруем экстремальные значения
         direction = str(signal.direction).upper()
-        if direction in ["LONG", "BUY"] and momentum > 70:
-            return False, f"Overbought (RSI={momentum:.1f})"
-        if direction in ["SHORT", "SELL"] and momentum < 30:
-            return False, f"Oversold (RSI={momentum:.1f})"
+        if "LONG" in direction and rsi > 75:
+            return False, f"Overbought (RSI={rsi:.0f})"
+        if "SHORT" in direction and rsi < 25:
+            return False, f"Oversold (RSI={rsi:.0f})"
 
-        return True, "Momentum OK"
+        return True, "OK"
 
-    def _filter_by_divergence(
+    def filter_by_volatility(
             self,
             signal: ChainSignal,
-            context: Dict
+            candles: List
     ) -> Tuple[bool, str]:
         """
-        Проверяет дивергенции между ценой и индикаторами
+        Проверяет волатильность (ATR)
         """
-        # Упрощенная проверка дивергенций
-        # В реальности здесь был бы более сложный анализ
-        return True, "No divergence detected"
+        if not candles or len(candles) < 20:
+            return True, "OK"
 
-    def _filter_by_correlation(
-            self,
-            signal: ChainSignal,
-            context: Dict
-    ) -> Tuple[bool, str]:
-        """
-        Проверяет корреляцию с другими парами
-        """
-        # Упрощенная проверка корреляций
-        # В реальности здесь был бы анализ других пар
-        return True, "Correlation check passed"
+        # Простой ATR
+        trs = []
+        for i in range(1, min(14, len(candles))):
+            h = candles[-i].high
+            l = candles[-i].low
+            prev_close = candles[-i - 1].close
+            tr = max(h - l, abs(h - prev_close), abs(l - prev_close))
+            trs.append(tr)
+
+        if not trs:
+            return True, "OK"
+
+        atr = sum(trs) / len(trs)
+        current_price = candles[-1].close
+        atr_percent = (atr / current_price) * 100
+
+        # Слишком низкая волатильность
+        if atr_percent < 0.5:
+            return False, f"Low volatility (ATR={atr_percent:.2f}%)"
+
+        # Слишком высокая волатильность
+        if atr_percent > 5:
+            return False, f"High volatility (ATR={atr_percent:.2f}%)"
+
+        return True, "OK"
 
 
-# Для совместимости с разными вариантами импорта
-class AdvancedSignalFilter(AdvancedFilter):
-    """
-    Альтернативное имя класса для обратной совместимости
-    """
+# Алиас для совместимости
+class AdvancedFilter(AdvancedSignalFilter):
     pass

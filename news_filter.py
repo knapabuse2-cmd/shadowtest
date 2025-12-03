@@ -1,7 +1,11 @@
 # news_filter.py
+# ИСПРАВЛЕНО: Добавлены все необходимые импорты
 
 from datetime import datetime, timedelta
+from typing import Tuple, List, Dict, Optional
 import aiohttp
+
+from analysis_interfaces import ChainSignal
 
 
 class NewsEventFilter:
@@ -10,10 +14,10 @@ class NewsEventFilter:
     """
 
     def __init__(self):
-        self.high_impact_events = []
-        self.last_update = None
+        self.high_impact_events: List[Dict] = []
+        self.last_update: Optional[datetime] = None
         self.block_before_minutes = 30  # Блокируем за 30 мин до новости
-        self.block_after_minutes = 30  # Блокируем 30 мин после
+        self.block_after_minutes = 30   # Блокируем 30 мин после
 
     async def update_calendar(self):
         """

@@ -1,8 +1,12 @@
+# liquidity_detector.py
+# ИСПРАВЛЕНО: Использует общие утилиты из utils.py
+
 from typing import List, Optional
 from dataclasses import dataclass
 
 from analysis_interfaces import Zone, DetectionResult
-# тут нам от свечи нужны только: open, high, low, close
+from utils import get_candle_timestamp
+from data.data_interfaces import Candle
 
 
 @dataclass
@@ -12,23 +16,6 @@ class SwingPoint:
     kind: str  # "HIGH" или "LOW"
 
 
-def _get_candle_timestamp(candle) -> Optional[int]:
-    """Безопасно извлекает timestamp из свечи"""
-    ts = getattr(candle, 'time', None)
-    if ts is None:
-        ts = getattr(candle, 'timestamp', None)
-
-    if hasattr(ts, 'timestamp'):
-        return int(ts.timestamp() * 1000)
-
-    if isinstance(ts, (int, float)):
-        if ts < 1000000000000:
-            return int(ts * 1000)
-        return int(ts)
-
-    import time
-    return int(time.time() * 1000)
-
 class LiquidityDetector:
     """
     Liquidity Detector PRO v1
@@ -37,11 +24,6 @@ class LiquidityDetector:
     - Ищет Equal Highs (EQH) и Equal Lows (EQL) по свингам
     - Строит зоны ликвидности (clusters)
     - Ищет sweeps этих зон (SWEEP_HIGH / SWEEP_LOW)
-
-    Это фундамент:
-    - для bias
-    - для моделей "после снятия ликвидности"
-    - для TP (пулы как цели)
     """
 
     def __init__(
@@ -58,13 +40,8 @@ class LiquidityDetector:
         self.sweep_lookback = sweep_lookback
         self.min_sweep_ratio = min_sweep_ratio
 
-    # ---------------------------------------------------
-    # PUBLIC API
-    # ---------------------------------------------------
-
-
-    def detect(self, candles: List, tf: str) -> DetectionResult:
-        """ИСПРАВЛЕННЫЙ метод detect для LiquidityDetector с timestamps"""
+    def detect(self, candles: List[Candle], tf: str) -> DetectionResult:
+        """Основной метод детекции"""
         zones: List[Zone] = []
 
         if not candles or len(candles) < self.swing_lookback * 4:
@@ -88,10 +65,7 @@ class LiquidityDetector:
 
         return DetectionResult(zones, None)
 
-    # ---------------------------------------------------
-    # SWINGS
-    # ---------------------------------------------------
-    def _find_swings(self, candles: List) -> List[SwingPoint]:
+    def _find_swings(self, candles: List[Candle]) -> List[SwingPoint]:
         swings: List[SwingPoint] = []
         n = len(candles)
         L = self.swing_lookback
@@ -113,11 +87,8 @@ class LiquidityDetector:
 
         return swings
 
-    # ---------------------------------------------------
-    # EQH / EQL
-    # ---------------------------------------------------
-    def _detect_eqh(self, candles: List, swings: List[SwingPoint], tf: str) -> List[Zone]:
-        """ИСПРАВЛЕННЫЙ _detect_eqh с timestamps"""
+    def _detect_eqh(self, candles: List[Candle], swings: List[SwingPoint], tf: str) -> List[Zone]:
+        """Equal Highs detection"""
         highs = [s for s in swings if s.kind == "HIGH"]
         zones: List[Zone] = []
         n = len(highs)
@@ -147,12 +118,8 @@ class LiquidityDetector:
                 low = min(prices)
                 high = max(prices)
 
-                # ДОБАВЛЯЕМ timestamp от последнего swing в кластере
                 last_swing = max(cluster, key=lambda s: s.index)
-                if last_swing.index < len(candles):
-                    timestamp = _get_candle_timestamp(candles[last_swing.index])
-                else:
-                    timestamp = _get_candle_timestamp(candles[-1])
+                timestamp = get_candle_timestamp(candles[last_swing.index]) if last_swing.index < len(candles) else get_candle_timestamp(candles[-1])
 
                 zones.append(
                     Zone(
@@ -160,14 +127,15 @@ class LiquidityDetector:
                         low=low,
                         high=high,
                         type="EQH",
-                        timestamp=timestamp,  # ДОБАВЛЕНО
-                        candle_index=last_swing.index  # ДОБАВЛЕНО
+                        timestamp=timestamp,
+                        candle_index=last_swing.index
                     )
                 )
 
         return zones
 
-    def _detect_eql(self, candles: List, swings: List[SwingPoint], tf: str) -> List[Zone]:
+    def _detect_eql(self, candles: List[Candle], swings: List[SwingPoint], tf: str) -> List[Zone]:
+        """Equal Lows detection"""
         lows = [s for s in swings if s.kind == "LOW"]
         zones: List[Zone] = []
         n = len(lows)
@@ -196,32 +164,31 @@ class LiquidityDetector:
                 prices = [p.price for p in cluster]
                 low = min(prices)
                 high = max(prices)
+
+                last_swing = max(cluster, key=lambda s: s.index)
+                timestamp = get_candle_timestamp(candles[last_swing.index]) if last_swing.index < len(candles) else get_candle_timestamp(candles[-1])
+
                 zones.append(
                     Zone(
                         tf=tf,
                         low=low,
                         high=high,
-                        type="EQL"
+                        type="EQL",
+                        timestamp=timestamp,
+                        candle_index=last_swing.index
                     )
                 )
 
         return zones
 
-    # ---------------------------------------------------
-    # SWEEPS
-    # ---------------------------------------------------
     def _detect_sweeps_high(
         self,
-        candles: List,
+        candles: List[Candle],
         swings: List[SwingPoint],
         eqh_zones: List[Zone],
         tf: str
     ) -> List[Zone]:
-        """
-        Ищем снятие ликвидности над EQH:
-        - high свечи > верхней границы EQH на min_sweep_ratio
-        - close уходит обратно под EQH (классический sweep, а не пробой и закрепление)
-        """
+        """Sweep над EQH"""
         zones: List[Zone] = []
         if not eqh_zones:
             return zones
@@ -234,19 +201,18 @@ class LiquidityDetector:
             eqh_high = z.high
             threshold = eqh_high * (1.0 + self.min_sweep_ratio)
 
-            # Просматриваем последние свечи
             start = max(0, n - self.sweep_lookback)
             for i in range(start, n):
                 c = candles[i]
-                # Прокол вверх
                 if c.high > threshold and c.close < eqh_high:
-                    # sweep-зона: от eqh_high до high свечи, которая сняла ликвидность
                     zones.append(
                         Zone(
                             tf=tf,
                             low=eqh_high,
                             high=c.high,
-                            type="SWEEP_HIGH"
+                            type="SWEEP_HIGH",
+                            timestamp=get_candle_timestamp(c),
+                            candle_index=i
                         )
                     )
                     break
@@ -255,16 +221,12 @@ class LiquidityDetector:
 
     def _detect_sweeps_low(
         self,
-        candles: List,
+        candles: List[Candle],
         swings: List[SwingPoint],
         eql_zones: List[Zone],
         tf: str
     ) -> List[Zone]:
-        """
-        Sweep под EQL:
-        - low свечи < нижней границы EQL на min_sweep_ratio
-        - close возвращается выше EQL
-        """
+        """Sweep под EQL"""
         zones: List[Zone] = []
         if not eql_zones:
             return zones
@@ -286,7 +248,9 @@ class LiquidityDetector:
                             tf=tf,
                             low=c.low,
                             high=eql_low,
-                            type="SWEEP_LOW"
+                            type="SWEEP_LOW",
+                            timestamp=get_candle_timestamp(c),
+                            candle_index=i
                         )
                     )
                     break

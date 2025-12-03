@@ -162,11 +162,15 @@ def _find_structural_stop_loss(
         entry: float
 ) -> Optional[float]:
     """
-    ICT-логика стопа:
+    ICT-логика стопа - ИСПРАВЛЕННАЯ ВЕРСИЯ:
 
-    1. Для OB/Breaker: стоп за границей зоны (это и есть структура)
-    2. Для FVG/IDM: ищем ближайший ЗНАЧИМЫЙ swing
-    3. Минимальный риск 0.5% (защита от микростопов)
+    ПРИОРИТЕТ 1: Стоп ЗА ГРАНИЦЕЙ ЗОНЫ (OB, FVG, IDM, BREAKER, MB, BISI, SIBI)
+    ПРИОРИТЕТ 2: Если зона слишком узкая - ищем ближайший swing РЯДОМ с зоной
+    
+    БЕЗ fallback на random recent_low/high - это давало "стоп в воздухе"!
+    Лучше отклонить сигнал, чем дать плохой SL.
+    
+    Минимальный риск 0.3% (защита от микростопов)
     """
 
     DEBUG = True
@@ -183,166 +187,197 @@ def _find_structural_stop_loss(
     dbg(f"Candles on {tf}: {len(candles)}, Entry: {entry:.5f}")
     dbg(f"Zone type: {zone.type}, Zone: {zone.low:.5f}-{zone.high:.5f}")
 
-    # === БУФЕР ===
+    # === БУФЕР (небольшой отступ от уровня) ===
     atr = _calculate_atr(candles, 14)
     buffer = atr * 0.15 if atr > 0 else entry * 0.001
     dbg(f"ATR: {atr:.6f}, Buffer: {buffer:.6f}")
 
-    # === МИНИМАЛЬНЫЙ РИСК 0.5% ===
-    min_risk = entry * 0.005
-    dbg(f"Min risk (0.5%): {min_risk:.5f}")
+    # === МИНИМАЛЬНЫЙ РИСК 0.3% ===
+    min_risk = entry * 0.003
+    dbg(f"Min risk (0.3%): {min_risk:.5f}")
 
     stop_loss = None
+    zone_sl = None  # SL на основе границы зоны
 
-    # === ВАРИАНТ 1: Для OB/BREAKER — стоп за границей зоны ===
-    if "OB" in zone.type or "BREAKER" in zone.type:
+    # =======================================================
+    # ПРИОРИТЕТ 1: СТОП ЗА ГРАНИЦЕЙ ЗОНЫ
+    # Это ОСНОВНОЙ метод для ICT - стоп всегда за структурой!
+    # =======================================================
+    
+    zone_type_upper = zone.type.upper()
+    
+    # Все типы зон, которые дают структурный SL
+    is_zone_based_sl = any(x in zone_type_upper for x in [
+        "OB",       # Order Block
+        "FVG",      # Fair Value Gap
+        "IDM",      # Inducement
+        "BREAKER",  # Breaker Block
+        "MB",       # Mitigation Block
+        "BISI",     # Buy-side Imbalance
+        "SIBI",     # Sell-side Imbalance
+        "POI",      # Point of Interest
+        "FH_",      # Fractal High/Low
+    ])
+    
+    if is_zone_based_sl:
         if direction == Direction.LONG:
-            # Стоп за low зоны
-            stop_loss = zone.low - buffer
-            dbg(f"OB zone SL (behind zone.low): {stop_loss:.5f}")
+            # Для LONG: стоп ПОД зоной (за нижней границей)
+            zone_sl = zone.low - buffer
+            dbg(f"Zone-based SL (behind zone.low): {zone_sl:.5f}")
         else:
-            # Стоп за high зоны
-            stop_loss = zone.high + buffer
-            dbg(f"OB zone SL (behind zone.high): {stop_loss:.5f}")
+            # Для SHORT: стоп НАД зоной (за верхней границей)
+            zone_sl = zone.high + buffer
+            dbg(f"Zone-based SL (behind zone.high): {zone_sl:.5f}")
 
         # Проверяем минимальный риск
-        actual_risk = abs(entry - stop_loss)
-        if actual_risk >= min_risk:
-            dbg(f"✓ OB SL OK, risk: {actual_risk / entry * 100:.2f}%")
-            return stop_loss
+        zone_risk = abs(entry - zone_sl)
+        zone_risk_pct = zone_risk / entry * 100
+        
+        if zone_risk >= min_risk:
+            # Зона даёт достаточный риск - используем!
+            dbg(f"✓ Zone SL OK, risk: {zone_risk_pct:.2f}%")
+            stop_loss = zone_sl
         else:
-            dbg(f"OB SL too tight ({actual_risk / entry * 100:.2f}%), looking for swing...")
-            stop_loss = None  # Ищем swing
+            dbg(f"Zone SL too tight ({zone_risk_pct:.2f}%), will look for swing NEAR zone...")
+            # Сохраняем zone_sl как fallback
 
-    # === ВАРИАНТ 2: Ищем свинги ===
-    all_swings = []
+    # =======================================================
+    # ПРИОРИТЕТ 2: Если зона узкая - ищем swing РЯДОМ с зоной
+    # ВАЖНО: swing должен быть ОКОЛО зоны, не где-то далеко!
+    # =======================================================
+    
+    if stop_loss is None:
+        dbg("Looking for structural swing near zone...")
+        
+        all_swings = []
 
-    # Текущий TF
-    if len(candles) >= 6:
-        swings_soft = _find_swings(candles, left=2, right=1)
-        all_swings.extend(swings_soft)
-    if len(candles) >= 8:
-        swings_normal = _find_swings(candles, left=3, right=2)
-        all_swings.extend(swings_normal)
+        # Свинги с текущего TF
+        if len(candles) >= 6:
+            swings_soft = _find_swings(candles, left=2, right=1)
+            all_swings.extend(swings_soft)
+        if len(candles) >= 8:
+            swings_normal = _find_swings(candles, left=3, right=2)
+            all_swings.extend(swings_normal)
 
-    # Старшие TF
-    for htf in ["1h", "4h"]:
-        htf_candles = ctx.candles.get(htf, [])
-        if htf_candles and len(htf_candles) >= 8:
-            htf_swings = _find_swings(htf_candles, left=2, right=1)
-            all_swings.extend(htf_swings)
-            dbg(f"Swings {htf}: {len(htf_swings)}")
+        # Свинги со старших TF (более значимые)
+        for htf in ["1h", "4h"]:
+            htf_candles = ctx.candles.get(htf, [])
+            if htf_candles and len(htf_candles) >= 8:
+                htf_swings = _find_swings(htf_candles, left=2, right=1)
+                all_swings.extend(htf_swings)
+                dbg(f"Swings from {htf}: {len(htf_swings)}")
 
-    # Убираем дубликаты
-    unique_swings = []
-    seen_prices = set()
-    for s in all_swings:
-        price_key = round(s["price"] / entry * 1000)
-        key = (s["kind"], price_key)
-        if key not in seen_prices:
-            seen_prices.add(key)
-            unique_swings.append(s)
+        # Убираем дубликаты
+        unique_swings = []
+        seen_prices = set()
+        for s in all_swings:
+            price_key = round(s["price"] / entry * 1000)
+            key = (s["kind"], price_key)
+            if key not in seen_prices:
+                seen_prices.add(key)
+                unique_swings.append(s)
 
-    dbg(f"Total unique swings: {len(unique_swings)}")
+        dbg(f"Total unique swings: {len(unique_swings)}")
 
-    if direction == Direction.LONG:
-        valid_lows = [s for s in unique_swings if s["kind"] == "LOW" and s["price"] < entry]
-        dbg(f"Valid swing LOWs below entry: {len(valid_lows)}")
+        # КЛЮЧЕВОЕ: Максимальное расстояние от зоны для поиска swing
+        # Swing должен быть рядом с зоной, не где-то далеко!
+        max_swing_distance = entry * 0.03  # Максимум 3% от цены
+        
+        if direction == Direction.LONG:
+            # Ищем swing LOW:
+            # 1) Ниже entry
+            # 2) Ниже зоны (за ней)
+            # 3) Но не слишком далеко от зоны
+            valid_lows = [s for s in unique_swings 
+                         if s["kind"] == "LOW" 
+                         and s["price"] < entry
+                         and s["price"] < zone.low  # Ниже зоны
+                         and (zone.low - s["price"]) < max_swing_distance]  # Близко к зоне
+            
+            dbg(f"Valid swing LOWs near zone: {len(valid_lows)}")
 
-        if valid_lows:
-            # Сортируем по цене (от высокой к низкой = от ближней к дальней)
-            valid_lows.sort(key=lambda s: s["price"], reverse=True)
+            if valid_lows:
+                # Сортируем по близости к зоне (ближайший первый)
+                valid_lows.sort(key=lambda s: zone.low - s["price"])
 
-            for i, swing in enumerate(valid_lows[:5]):
-                dbg(f"  Swing LOW {i}: {swing['price']:.5f}")
+                for i, swing in enumerate(valid_lows[:3]):
+                    dist = zone.low - swing["price"]
+                    dbg(f"  Swing LOW {i}: {swing['price']:.5f} (dist from zone: {dist:.5f})")
 
-            # === КЛЮЧЕВОЕ ИЗМЕНЕНИЕ ===
-            # Для старших TF (1h, 4h) берём более значимый swing (2-й или 3-й)
-            # Для младших (15m) берём ближайший
-
-            if tf in ["4h", "1h"] and len(valid_lows) >= 2:
-                # Пропускаем первый (мелкий) swing, берём второй
-                # Но проверяем что первый действительно "мелкий" (близко к entry)
-                first_swing = valid_lows[0]
-                first_distance = entry - first_swing["price"]
-
-                # Если первый swing даёт меньше 1.5% риска - пропускаем его
-                if first_distance < entry * 0.015 and len(valid_lows) >= 2:
-                    dbg(f"Skipping shallow swing {first_swing['price']:.5f} (only {first_distance / entry * 100:.2f}%)")
-                    swing_to_use = valid_lows[1]  # Берём второй
-                else:
-                    swing_to_use = valid_lows[0]
-            else:
+                # Берём ближайший к зоне swing
                 swing_to_use = valid_lows[0]
+                stop_loss = swing_to_use["price"] - buffer
+                dbg(f"Using swing near zone: {swing_to_use['price']:.5f}, SL: {stop_loss:.5f}")
 
-            stop_loss = swing_to_use["price"] - buffer
-            dbg(f"Using swing: {swing_to_use['price']:.5f}, SL: {stop_loss:.5f}")
+            # Если swing не найден, но есть zone_sl - используем его
+            elif zone_sl is not None:
+                dbg(f"No swing found near zone, using zone SL: {zone_sl:.5f}")
+                stop_loss = zone_sl
 
-        # Fallback: recent low
-        if stop_loss is None:
-            lookback = min(50, len(candles))
-            recent_low = min(c.low for c in candles[-lookback:])
-            dbg(f"Recent low (last {lookback}): {recent_low:.5f}")
+        else:  # SHORT
+            valid_highs = [s for s in unique_swings 
+                          if s["kind"] == "HIGH" 
+                          and s["price"] > entry
+                          and s["price"] > zone.high  # Выше зоны
+                          and (s["price"] - zone.high) < max_swing_distance]  # Близко к зоне
+            
+            dbg(f"Valid swing HIGHs near zone: {len(valid_highs)}")
 
-            if entry - recent_low >= min_risk:
-                stop_loss = recent_low - buffer
-                dbg(f"SL from recent low: {stop_loss:.5f}")
+            if valid_highs:
+                valid_highs.sort(key=lambda s: s["price"] - zone.high)
 
-        # Финальные проверки
-        if stop_loss is None:
-            dbg("NO VALID SL FOUND!")
-            return None
+                for i, swing in enumerate(valid_highs[:3]):
+                    dist = swing["price"] - zone.high
+                    dbg(f"  Swing HIGH {i}: {swing['price']:.5f} (dist from zone: {dist:.5f})")
 
+                swing_to_use = valid_highs[0]
+                stop_loss = swing_to_use["price"] + buffer
+                dbg(f"Using swing near zone: {swing_to_use['price']:.5f}, SL: {stop_loss:.5f}")
+
+            elif zone_sl is not None:
+                dbg(f"No swing found near zone, using zone SL: {zone_sl:.5f}")
+                stop_loss = zone_sl
+
+    # =======================================================
+    # НЕТ FALLBACK на recent_low/recent_high!
+    # Это и давало "стоп в воздухе"
+    # Лучше отклонить сигнал, чем дать плохой SL
+    # =======================================================
+
+    # === ФИНАЛЬНЫЕ ПРОВЕРКИ ===
+    if stop_loss is None:
+        dbg("NO VALID STRUCTURAL SL FOUND - rejecting signal")
+        return None
+
+    # Проверка направления и минимального риска
+    if direction == Direction.LONG:
         if stop_loss >= entry:
-            dbg(f"SL {stop_loss:.5f} >= Entry {entry:.5f}, invalid!")
+            dbg(f"INVALID: SL {stop_loss:.5f} >= Entry {entry:.5f}")
             return None
-
+            
         actual_risk = entry - stop_loss
         if actual_risk < min_risk:
-            dbg(f"Risk {actual_risk:.5f} < min {min_risk:.5f}")
+            dbg(f"Risk too small: {actual_risk:.5f} < {min_risk:.5f}")
             return None
-
+            
     else:  # SHORT
-        valid_highs = [s for s in unique_swings if s["kind"] == "HIGH" and s["price"] > entry]
-        dbg(f"Valid swing HIGHs above entry: {len(valid_highs)}")
-
-        if valid_highs:
-            valid_highs.sort(key=lambda s: s["price"])  # От низкой к высокой
-
-            if tf in ["4h", "1h"] and len(valid_highs) >= 2:
-                first_swing = valid_highs[0]
-                first_distance = first_swing["price"] - entry
-
-                if first_distance < entry * 0.015 and len(valid_highs) >= 2:
-                    dbg(f"Skipping shallow swing {first_swing['price']:.5f}")
-                    swing_to_use = valid_highs[1]
-                else:
-                    swing_to_use = valid_highs[0]
-            else:
-                swing_to_use = valid_highs[0]
-
-            stop_loss = swing_to_use["price"] + buffer
-
-        if stop_loss is None:
-            lookback = min(50, len(candles))
-            recent_high = max(c.high for c in candles[-lookback:])
-
-            if recent_high - entry >= min_risk:
-                stop_loss = recent_high + buffer
-
-        if stop_loss is None:
-            return None
-
         if stop_loss <= entry:
+            dbg(f"INVALID: SL {stop_loss:.5f} <= Entry {entry:.5f}")
             return None
-
+            
         actual_risk = stop_loss - entry
         if actual_risk < min_risk:
+            dbg(f"Risk too small: {actual_risk:.5f} < {min_risk:.5f}")
             return None
 
-    dbg(f"✓ Final SL: {stop_loss:.5f}, Risk: {abs(entry - stop_loss) / entry * 100:.2f}%")
+    risk_pct = abs(entry - stop_loss) / entry * 100
+    dbg(f"✓ Final SL: {stop_loss:.5f}, Risk: {risk_pct:.2f}%")
+    
+    # Предупреждение если риск большой
+    if risk_pct > 5.0:
+        dbg(f"WARNING: Risk {risk_pct:.2f}% > 5% - might be too wide")
+    
     return stop_loss
-
 
 # ---------------------------------------------------------------
 #     ИСПРАВЛЕННЫЙ TP FINDER - только на liquidity/imbalance
@@ -426,7 +461,13 @@ def _find_liquidity_targets(
 # ---------------------------------------------------------------
 
 def _is_price_in_zone(ctx: ChainContext, zone: Zone, tf: str) -> bool:
-    """Проверяет, находится ли текущая цена близко к зоне"""
+    """
+    Проверяет, находится ли текущая цена близко к зоне.
+    
+    ИСПРАВЛЕНО: Буфер уменьшен с 1.5% до 0.3% от цены
+    1.5% для BTC $95000 = $1425 - это слишком много!
+    0.3% для BTC $95000 = $285 - более разумно
+    """
     candles = ctx.candles.get(tf, [])
     if not candles:
         return False
@@ -434,13 +475,16 @@ def _is_price_in_zone(ctx: ChainContext, zone: Zone, tf: str) -> bool:
     current_price = candles[-1].close
     zone_size = zone.high - zone.low
 
-    # Буфер = 50% от размера зоны или 1.5% от цены (что больше)
-    buffer = max(zone_size * 0.5, current_price * 0.015)
+    # ИСПРАВЛЕНО: Буфер = 30% от размера зоны или 0.3% от цены (что МЕНЬШЕ)
+    # Было: max(zone_size * 0.5, current_price * 0.015)
+    # Стало: min(zone_size * 0.3, current_price * 0.003)
+    buffer = min(zone_size * 0.3, current_price * 0.003)
 
     expanded_low = zone.low - buffer
     expanded_high = zone.high + buffer
 
     return expanded_low <= current_price <= expanded_high
+
 
 
 # ---------------------------------------------------------------

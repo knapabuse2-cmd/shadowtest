@@ -1,5 +1,6 @@
-# analysis_detectors.py (ИСПРАВЛЕННАЯ ВЕРСИЯ С TIMESTAMPS)
+# analysis_detectors.py (ИСПРАВЛЕННАЯ ВЕРСИЯ)
 # =========================================================
+# Использует общие утилиты из utils.py
 
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
@@ -8,74 +9,16 @@ import numpy as np
 
 from analysis_interfaces import Zone, DetectionResult, VolumeContext
 from data.data_interfaces import Candle
+from utils import get_candle_timestamp, avg_body, calculate_atr
 
 
-# -------------------------------------
-# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (ОБЩИЕ)
-# -------------------------------------
-
-def _get_candle_timestamp(candle) -> Optional[int]:
-    """
-    Безопасно извлекает timestamp из свечи
-    """
-    # Пробуем разные варианты получения времени
-    ts = getattr(candle, 'time', None)
-    if ts is None:
-        ts = getattr(candle, 'timestamp', None)
-
-    # Если это datetime объект
-    if hasattr(ts, 'timestamp'):
-        return int(ts.timestamp() * 1000)
-
-    # Если это уже число
-    if isinstance(ts, (int, float)):
-        # Проверяем, не в секундах ли (слишком маленькое число)
-        if ts < 1000000000000:  # Меньше чем timestamp в миллисекундах
-            return int(ts * 1000)
-        return int(ts)
-
-    # Fallback на текущее время
-    import time
-    return int(time.time() * 1000)
-
-
-def _avg_body(candles: List[Candle], lookback: int = 20) -> float:
-    """
-    Средний размер тела свечи за lookback.
-    """
-    if not candles:
-        return 0.0
-
-    sub = candles[-lookback:] if len(candles) > lookback else candles
-    bodies = [abs(c.close - c.open) for c in sub]
-    if not bodies:
-        return 0.0
-
-    return sum(bodies) / len(bodies)
-
-
-def _atr(candles: List[Candle], period: int = 14) -> float:
-    """True Range / ATR для оценки силы движения и фильтра свингов."""
-    if len(candles) < 2:
-        return 0.0
-    trs = []
-    for i in range(1, len(candles)):
-        h = candles[i].high
-        l = candles[i].low
-        prev_close = candles[i - 1].close
-        tr = max(h - l, abs(h - prev_close), abs(l - prev_close))
-        trs.append(tr)
-    if not trs:
-        return 0.0
-    use = trs[-period:]
-    return sum(use) / len(use)
-
+# ==========================================================
+#     MARKET STRUCTURE FUNCTIONS
+# ==========================================================
 
 def _find_swings(candles: List[Candle], left: int = 2, right: int = 2):
     """
-    Ищем фрактальные swing highs / swing lows:
-    HIGH – выше N слева и N справа
-    LOW  – ниже N слева и N справа
+    Ищем фрактальные swing highs / swing lows
     """
     swings = []
     n = len(candles)
@@ -98,11 +41,7 @@ def _find_swings(candles: List[Candle], left: int = 2, right: int = 2):
 
 
 def _filter_major_swings(swings, atr: float, min_factor: float = 0.5):
-    """
-    Оставляем только значимые свинги:
-    амплитуда > min_factor * ATR.
-    Это external structure относительно мелких дерганий.
-    """
+    """Оставляем только значимые свинги"""
     if atr <= 0 or len(swings) < 2:
         return swings
 
@@ -115,10 +54,7 @@ def _filter_major_swings(swings, atr: float, min_factor: float = 0.5):
 
 
 def _classify_structure(swings):
-    """
-    Строим базовую структуру HH/HL/LH/LL и общий тренд:
-    BULLISH / BEARISH / RANGE.
-    """
+    """Строим базовую структуру HH/HL/LH/LL и общий тренд"""
     if len(swings) < 3:
         return "RANGE", []
 
@@ -150,10 +86,7 @@ def _classify_structure(swings):
 
 
 def _find_bos(swings, candles: List[Candle]):
-    """
-    Ищем направление последнего BOS:
-    UP / DOWN / NONE
-    """
+    """Ищем направление последнего BOS"""
     if len(swings) < 3:
         return "NONE"
 
@@ -170,15 +103,11 @@ def _find_bos(swings, candles: List[Candle]):
 
 
 def _protected_extremes(swings, candles: List[Candle]):
-    """
-    Protected High/Low:
-    последний swing, за который цена ещё не закрывалась.
-    """
+    """Protected High/Low"""
     last_index = len(candles) - 1
     prot_high = None
     prot_low = None
 
-    # Protected High
     for s in reversed(swings):
         if s["kind"] != "HIGH":
             continue
@@ -187,7 +116,6 @@ def _protected_extremes(swings, candles: List[Candle]):
             prot_high = s["price"]
             break
 
-    # Protected Low
     for s in reversed(swings):
         if s["kind"] != "LOW":
             continue
@@ -200,11 +128,7 @@ def _protected_extremes(swings, candles: List[Candle]):
 
 
 def _liquidity_target(swings, bias: str, current_price: float):
-    """
-    Простая модель liquidity draw:
-    - BULLISH → ближайший high выше цены
-    - BEARISH → ближайший low ниже цены
-    """
+    """Простая модель liquidity draw"""
     target = None
     target_kind = None
 
@@ -228,12 +152,7 @@ def _liquidity_target(swings, bias: str, current_price: float):
 
 def detect_market_structure(candles: List[Candle], tf: str) -> VolumeContext:
     """
-    FULL ICT-style market structure:
-    - swings (HH/HL/LH/LL)
-    - BOS / CHoCH
-    - protected highs/lows
-    - liquidity target
-    - bias (BULLISH / BEARISH / RANGE)
+    FULL ICT-style market structure
     """
     if len(candles) < 10:
         return VolumeContext(
@@ -244,7 +163,7 @@ def detect_market_structure(candles: List[Candle], tf: str) -> VolumeContext:
             killzone="None",
         )
 
-    atr = _atr(candles, period=14)
+    atr = calculate_atr(candles, period=14)
     swings = _find_swings(candles, left=2, right=2)
     if not swings:
         return VolumeContext(
@@ -259,11 +178,10 @@ def detect_market_structure(candles: List[Candle], tf: str) -> VolumeContext:
     base_for_structure = major_swings if len(major_swings) >= 3 else swings
 
     structure, labels = _classify_structure(base_for_structure)
-    bias = structure  # BULLISH / BEARISH / RANGE
+    bias = structure
 
     bos_dir = _find_bos(base_for_structure, candles)
 
-    # CHoCH – грубо: BOS против текущей структуры
     choch = "NONE"
     if bos_dir == "UP" and structure == "BEARISH":
         choch = "BULLISH_CH"
@@ -294,10 +212,7 @@ def detect_market_structure(candles: List[Candle], tf: str) -> VolumeContext:
 
 
 def _find_swing_high_idx(candles: List[Candle], lookback: int = 20) -> Optional[int]:
-    """
-    Swing High:
-        high[i] > high[i-1] AND high[i] > high[i+1]
-    """
+    """Swing High"""
     if len(candles) < 5:
         return None
 
@@ -314,10 +229,7 @@ def _find_swing_high_idx(candles: List[Candle], lookback: int = 20) -> Optional[
 
 
 def _find_swing_low_idx(candles: List[Candle], lookback: int = 20) -> Optional[int]:
-    """
-    Swing Low:
-        low[i] < low[i-1] AND low[i] < low[i+1]
-    """
+    """Swing Low"""
     if len(candles) < 5:
         return None
 
@@ -334,13 +246,11 @@ def _find_swing_low_idx(candles: List[Candle], lookback: int = 20) -> Optional[i
 
 
 # ==========================================================
-#                 ORDER BLOCK DETECTOR (С TIMESTAMPS)
+#                 ORDER BLOCK DETECTOR
 # ==========================================================
 
 class OrderBlockDetector:
-    """
-    Упрощённый ICT-style Order Block с добавлением timestamps.
-    """
+    """Упрощённый ICT-style Order Block"""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         config = config or {}
@@ -352,45 +262,39 @@ class OrderBlockDetector:
         if len(candles) < self.min_candles:
             return None
 
-        avg_body = _avg_body(candles, lookback=50)
-        if avg_body <= 0:
+        avg_b = avg_body(candles, lookback=50)
+        if avg_b <= 0:
             return None
 
-        # идём с конца, ищем последнюю подходящую медвежью базу
         for i in range(len(candles) - 3, 2, -1):
             base = candles[i]
-            # база должна быть медвежья
             if base.close >= base.open:
                 continue
 
-            # в ближайших N свечах ищем сильную бычью свечу
             found_impulse = False
             for j in range(i + 1, min(len(candles), i + 1 + self.lookahead)):
                 imp = candles[j]
                 if imp.close <= imp.open:
                     continue
                 body = abs(imp.close - imp.open)
-                if body >= avg_body * self.displacement_factor:
+                if body >= avg_b * self.displacement_factor:
                     found_impulse = True
                     break
 
             if not found_impulse:
                 continue
 
-            # нашли Bullish OB
             low = base.low
             high = base.open
-
-            # ИСПРАВЛЕНО: Получаем timestamp
-            timestamp = _get_candle_timestamp(base)
+            timestamp = get_candle_timestamp(base)
 
             return Zone(
                 tf=tf,
                 high=high,
                 low=low,
                 type="OB_BULL",
-                timestamp=timestamp,  # ДОБАВЛЕНО
-                candle_index=i  # ДОБАВЛЕНО
+                timestamp=timestamp,
+                candle_index=i
             )
 
         return None
@@ -399,13 +303,12 @@ class OrderBlockDetector:
         if len(candles) < self.min_candles:
             return None
 
-        avg_body = _avg_body(candles, lookback=50)
-        if avg_body <= 0:
+        avg_b = avg_body(candles, lookback=50)
+        if avg_b <= 0:
             return None
 
         for i in range(len(candles) - 3, 2, -1):
             base = candles[i]
-            # база должна быть бычья
             if base.close <= base.open:
                 continue
 
@@ -415,7 +318,7 @@ class OrderBlockDetector:
                 if imp.close >= imp.open:
                     continue
                 body = abs(imp.close - imp.open)
-                if body >= avg_body * self.displacement_factor:
+                if body >= avg_b * self.displacement_factor:
                     found_impulse = True
                     break
 
@@ -424,17 +327,15 @@ class OrderBlockDetector:
 
             high = base.high
             low = base.open
-
-            # ИСПРАВЛЕНО: Получаем timestamp
-            timestamp = _get_candle_timestamp(base)
+            timestamp = get_candle_timestamp(base)
 
             return Zone(
                 tf=tf,
                 high=high,
                 low=low,
                 type="OB_BEAR",
-                timestamp=timestamp,  # ДОБАВЛЕНО
-                candle_index=i  # ДОБАВЛЕНО
+                timestamp=timestamp,
+                candle_index=i
             )
 
         return None
@@ -454,13 +355,11 @@ class OrderBlockDetector:
 
 
 # ==========================================================
-#                 FAIR VALUE GAP DETECTOR (С TIMESTAMPS)
+#                 FAIR VALUE GAP DETECTOR
 # ==========================================================
 
 class FairValueGapDetector:
-    """
-    ICT-style FVG детектор с добавлением timestamps.
-    """
+    """ICT-style FVG детектор"""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         config = config or {}
@@ -469,9 +368,6 @@ class FairValueGapDetector:
         self.max_fvg_count: int = config.get("max_fvg_count", 3)
 
     def _avg_range(self, candles: List[Candle], lookback: int = 50) -> float:
-        """
-        Средний диапазон свечи (high-low) за lookback баров.
-        """
         if not candles:
             return 0.0
 
@@ -494,7 +390,6 @@ class FairValueGapDetector:
 
         min_gap = avg_range * self.min_size_factor
 
-        # Идём с конца, чтобы найти самые свежие FVG
         for i in range(len(candles) - 1, 1, -1):
             if len(zones) >= self.max_fvg_count:
                 break
@@ -503,10 +398,9 @@ class FairValueGapDetector:
             c1 = candles[i - 1]
             c2 = candles[i]
 
-            # ИСПРАВЛЕНО: Получаем timestamp от свечи c2
-            timestamp = _get_candle_timestamp(c2)
+            timestamp = get_candle_timestamp(c2)
 
-            # Bullish FVG (овербаланс вверх)
+            # Bullish FVG
             if c0.high < c2.low:
                 gap_low = c0.high
                 gap_high = c2.low
@@ -518,12 +412,12 @@ class FairValueGapDetector:
                             high=gap_high,
                             low=gap_low,
                             type="FVG_UP",
-                            timestamp=timestamp,  # ДОБАВЛЕНО
-                            candle_index=i  # ДОБАВЛЕНО
+                            timestamp=timestamp,
+                            candle_index=i
                         )
                     )
 
-            # Bearish FVG (овербаланс вниз)
+            # Bearish FVG
             if c0.low > c2.high:
                 gap_low = c2.high
                 gap_high = c0.low
@@ -535,25 +429,22 @@ class FairValueGapDetector:
                             high=gap_high,
                             low=gap_low,
                             type="FVG_DOWN",
-                            timestamp=timestamp,  # ДОБАВЛЕНО
-                            candle_index=i  # ДОБАВЛЕНО
+                            timestamp=timestamp,
+                            candle_index=i
                         )
                     )
 
-        # Сортируем по времени (самые новые первые)
         zones.sort(key=lambda z: z.candle_index if z.candle_index else 0, reverse=True)
 
         return DetectionResult(zones=zones, context=None)
 
 
 # ==========================================================
-#                 FRACTAL DETECTOR (С TIMESTAMPS)
+#                 FRACTAL DETECTOR
 # ==========================================================
 
 class FractalDetector:
-    """
-    Fractal / FH Detector для цепочки 2.6 с добавлением timestamps
-    """
+    """Fractal / FH Detector для цепочки 2.6"""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         config = config or {}
@@ -564,10 +455,6 @@ class FractalDetector:
         self.detect_lows = config.get("detect_lows", True)
 
     def _is_fractal_high(self, candles: List[Candle], i: int) -> bool:
-        """
-        Простой swing high:
-            high[i] > high[i-k..i-1] и high[i] > high[i+1..i+k]
-        """
         c = candles[i]
         left_slice = candles[i - self.left: i]
         right_slice = candles[i + 1: i + 1 + self.right]
@@ -584,10 +471,6 @@ class FractalDetector:
         return True
 
     def _is_fractal_low(self, candles: List[Candle], i: int) -> bool:
-        """
-        Простой swing low:
-            low[i] < low[i-k..i-1] и low[i] < low[i+1..i+k]
-        """
         c = candles[i]
         left_slice = candles[i - self.left: i]
         right_slice = candles[i + 1: i + 1 + self.right]
@@ -615,11 +498,8 @@ class FractalDetector:
 
         for i in range(start, end):
             c = candles[i]
+            timestamp = get_candle_timestamp(c)
 
-            # ИСПРАВЛЕНО: Получаем timestamp
-            timestamp = _get_candle_timestamp(c)
-
-            # Fractal High → зона по верхней тени
             if self.detect_highs and self._is_fractal_high(candles, i):
                 body_high = max(c.open, c.close)
                 zone_high = c.high
@@ -631,12 +511,11 @@ class FractalDetector:
                         high=zone_high,
                         low=zone_low,
                         type="FH_HIGH",
-                        timestamp=timestamp,  # ДОБАВЛЕНО
-                        candle_index=i  # ДОБАВЛЕНО
+                        timestamp=timestamp,
+                        candle_index=i
                     )
                 )
 
-            # Fractal Low → зона по нижней тени
             if self.detect_lows and self._is_fractal_low(candles, i):
                 body_low = min(c.open, c.close)
                 zone_low = c.low
@@ -648,8 +527,8 @@ class FractalDetector:
                         high=zone_high,
                         low=zone_low,
                         type="FH_LOW",
-                        timestamp=timestamp,  # ДОБАВЛЕНО
-                        candle_index=i  # ДОБАВЛЕНО
+                        timestamp=timestamp,
+                        candle_index=i
                     )
                 )
 
@@ -657,18 +536,11 @@ class FractalDetector:
 
 
 # ==========================================================
-#      VOLUMECONTEXT BUILDER → ICT BIAS + STRUCTURE
+#      VOLUMECONTEXT BUILDER
 # ==========================================================
 
 class VolumeContextBuilder:
-    """
-    Строит полный контекст:
-    - bias (BULLISH / BEARISH / RANGE)
-    - структура (HH/HL/LH/LL)
-    - BOS / CHoCH
-    - protected highs / lows
-    - liquidity target
-    """
+    """Строит полный контекст структуры рынка"""
 
     def detect(self, candles: List[Candle], tf: str) -> DetectionResult:
         if not candles or len(candles) < 10:

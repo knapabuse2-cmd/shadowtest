@@ -1,9 +1,12 @@
+# breaker_detector.py
+# ИСПРАВЛЕНО: Использует общие утилиты из utils.py
+
 from typing import List, Optional
 from dataclasses import dataclass
 
 from analysis_interfaces import Zone, DetectionResult
-# Candle импортируем только типом - у тебя он уже есть в data_interfaces,
-# но тут не обязателен. Главное, чтобы у свечи были .open/.high/.low/.close
+from utils import get_candle_timestamp, avg_body
+from data.data_interfaces import Candle
 
 
 @dataclass
@@ -12,23 +15,6 @@ class SwingPoint:
     price: float
     kind: str  # "HIGH" или "LOW"
 
-
-def _get_candle_timestamp(candle) -> Optional[int]:
-    """Безопасно извлекает timestamp из свечи"""
-    ts = getattr(candle, 'time', None)
-    if ts is None:
-        ts = getattr(candle, 'timestamp', None)
-
-    if hasattr(ts, 'timestamp'):
-        return int(ts.timestamp() * 1000)
-
-    if isinstance(ts, (int, float)):
-        if ts < 1000000000000:
-            return int(ts * 1000)
-        return int(ts)
-
-    import time
-    return int(time.time() * 1000)
 
 class BreakerDetector:
     """
@@ -59,13 +45,8 @@ class BreakerDetector:
         self.min_sweep_ratio = min_sweep_ratio
         self.min_displacement_factor = min_displacement_factor
 
-    # --------------------------------------------------
-    # PUBLIC API — будет вызываться Orchestrator'ом
-    # detect(candles, tf) → DetectionResult
-    # --------------------------------------------------
-
-    def detect(self, candles: List, tf: str) -> DetectionResult:
-        """ИСПРАВЛЕННЫЙ метод detect для BreakerDetector с timestamps"""
+    def detect(self, candles: List[Candle], tf: str) -> DetectionResult:
+        """Основной метод детекции"""
         zones: List[Zone] = []
 
         if not candles or len(candles) < self.swing_lookback * 4:
@@ -76,48 +57,17 @@ class BreakerDetector:
         bull_zone = self._detect_bullish_breaker(candles, swings)
         if bull_zone:
             bull_zone.tf = tf
-            # ДОБАВЛЯЕМ timestamp и candle_index
-            if len(candles) > 0:
-                # Находим свечу breaker
-                for i in range(len(candles) - 1, 0, -1):
-                    c = candles[i]
-                    if c.low >= bull_zone.low and c.high <= bull_zone.high:
-                        bull_zone.timestamp = _get_candle_timestamp(c)
-                        bull_zone.candle_index = i
-                        break
-                # Fallback на последнюю свечу
-                if bull_zone.timestamp is None:
-                    bull_zone.timestamp = _get_candle_timestamp(candles[-1])
-                    bull_zone.candle_index = len(candles) - 1
             zones.append(bull_zone)
 
         bear_zone = self._detect_bearish_breaker(candles, swings)
         if bear_zone:
             bear_zone.tf = tf
-            # ДОБАВЛЯЕМ timestamp и candle_index
-            if len(candles) > 0:
-                # Находим свечу breaker
-                for i in range(len(candles) - 1, 0, -1):
-                    c = candles[i]
-                    if c.low >= bear_zone.low and c.high <= bear_zone.high:
-                        bear_zone.timestamp = _get_candle_timestamp(c)
-                        bear_zone.candle_index = i
-                        break
-                # Fallback на последнюю свечу
-                if bear_zone.timestamp is None:
-                    bear_zone.timestamp = _get_candle_timestamp(candles[-1])
-                    bear_zone.candle_index = len(candles) - 1
             zones.append(bear_zone)
 
         return DetectionResult(zones, None)
 
-    # --------------------------------------------------
-    # SWINGS
-    # --------------------------------------------------
-    def _find_swings(self, candles: List) -> List[SwingPoint]:
-        """
-        Находим локальные HIGH/LOW по окну swing_lookback
-        """
+    def _find_swings(self, candles: List[Candle]) -> List[SwingPoint]:
+        """Находим локальные HIGH/LOW по окну swing_lookback"""
         swings: List[SwingPoint] = []
         n = len(candles)
         L = self.swing_lookback
@@ -139,48 +89,39 @@ class BreakerDetector:
 
         return swings
 
-    # --------------------------------------------------
-    # BULLISH BREAKER
-    # --------------------------------------------------
     def _detect_bullish_breaker(
         self,
-        candles: List,
+        candles: List[Candle],
         swings: List[SwingPoint]
     ) -> Optional[Zone]:
         """
         Ищем pattern:
           LOW (low1) → LOW (swept low2 < low1) → BOS UP → последняя медвежья свеча перед BOS
         """
-        # Отбираем только LOW swings
         lows = [s for s in swings if s.kind == "LOW"]
         if len(lows) < 2:
             return None
 
-        # Берём последние несколько комбинаций
         for i in range(len(lows) - 1, 0, -1):
-            low2 = lows[i]          # более свежий low
-            low1 = lows[i - 1]      # предыдущий low
+            low2 = lows[i]
+            low1 = lows[i - 1]
 
             if low2.index <= low1.index:
                 continue
 
-            # Проверяем sweep: low2 существенно ниже low1
             if not self._is_sweep(low1.price, low2.price, direction="DOWN"):
                 continue
 
-            # Ищем BOS UP после low2
             bos_index = self._find_bos_up(candles, low1.index, low2.index)
             if bos_index is None:
                 continue
 
-            # Находим breaker candle: последняя медвежья свеча перед BOS
             breaker_idx = self._last_bearish_before(candles, low2.index, bos_index)
             if breaker_idx is None:
                 continue
 
             c = candles[breaker_idx]
 
-            # Проверка на displacement (свеча BOS должна быть достаточно крупной)
             if not self._has_bullish_displacement(candles, bos_index):
                 continue
 
@@ -191,17 +132,16 @@ class BreakerDetector:
                 tf="",
                 low=body_low,
                 high=body_high,
-                type="BREAKER_BULL"
+                type="BREAKER_BULL",
+                timestamp=get_candle_timestamp(c),
+                candle_index=breaker_idx
             )
 
         return None
 
-    # --------------------------------------------------
-    # BEARISH BREAKER
-    # --------------------------------------------------
     def _detect_bearish_breaker(
         self,
-        candles: List,
+        candles: List[Candle],
         swings: List[SwingPoint]
     ) -> Optional[Zone]:
         """
@@ -219,7 +159,6 @@ class BreakerDetector:
             if high2.index <= high1.index:
                 continue
 
-            # Проверяем sweep: high2 значительно выше high1
             if not self._is_sweep(high1.price, high2.price, direction="UP"):
                 continue
 
@@ -243,30 +182,22 @@ class BreakerDetector:
                 tf="",
                 low=body_low,
                 high=body_high,
-                type="BREAKER_BEAR"
+                type="BREAKER_BEAR",
+                timestamp=get_candle_timestamp(c),
+                candle_index=breaker_idx
             )
 
         return None
 
-    # --------------------------------------------------
-    # BOS / SWEEP / DISPLACEMENT HELPERS
-    # --------------------------------------------------
     def _is_sweep(self, old_price: float, new_price: float, direction: str) -> bool:
-        """
-        Проверка, что есть sweep ликвидности:
-        - DOWN: new_price < old_price * (1 - min_sweep_ratio)
-        - UP:   new_price > old_price * (1 + min_sweep_ratio)
-        """
+        """Проверка sweep ликвидности"""
         if direction == "DOWN":
             return new_price < old_price * (1 - self.min_sweep_ratio)
         else:
             return new_price > old_price * (1 + self.min_sweep_ratio)
 
-    def _find_bos_up(self, candles: List, idx1: int, idx2: int) -> Optional[int]:
-        """
-        Ищем BOS UP после low2:
-        close > max high в диапазоне [idx1, idx2] + небольшой запас
-        """
+    def _find_bos_up(self, candles: List[Candle], idx1: int, idx2: int) -> Optional[int]:
+        """Ищем BOS UP после low2"""
         if idx2 >= len(candles) - 2:
             return None
 
@@ -278,10 +209,8 @@ class BreakerDetector:
                 return i
         return None
 
-    def _find_bos_down(self, candles: List, idx1: int, idx2: int) -> Optional[int]:
-        """
-        BOS DOWN: close < min low в диапазоне [idx1, idx2]
-        """
+    def _find_bos_down(self, candles: List[Candle], idx1: int, idx2: int) -> Optional[int]:
+        """BOS DOWN"""
         if idx2 >= len(candles) - 2:
             return None
 
@@ -293,55 +222,36 @@ class BreakerDetector:
                 return i
         return None
 
-    def _last_bearish_before(self, candles: List, start_idx: int, end_idx: int) -> Optional[int]:
-        """
-        Последняя медвежья свеча перед BOS UP
-        """
+    def _last_bearish_before(self, candles: List[Candle], start_idx: int, end_idx: int) -> Optional[int]:
+        """Последняя медвежья свеча перед BOS UP"""
         for i in range(end_idx - 1, start_idx - 1, -1):
             if candles[i].close < candles[i].open:
                 return i
         return None
 
-    def _last_bullish_before(self, candles: List, start_idx: int, end_idx: int) -> Optional[int]:
-        """
-        Последняя бычья свеча перед BOS DOWN
-        """
+    def _last_bullish_before(self, candles: List[Candle], start_idx: int, end_idx: int) -> Optional[int]:
+        """Последняя бычья свеча перед BOS DOWN"""
         for i in range(end_idx - 1, start_idx - 1, -1):
             if candles[i].close > candles[i].open:
                 return i
         return None
 
-    def _avg_body(self, candles: List, lookback: int = 50) -> float:
-        if not candles:
-            return 0.0
-        tail = candles[-lookback:]
-        bodies = [abs(c.close - c.open) for c in tail]
-        if not bodies:
-            return 0.0
-        return sum(bodies) / len(bodies)
-
-    def _has_bullish_displacement(self, candles: List, idx: int) -> bool:
-        """
-        Проверка, что свеча BOS UP действительно displacement:
-        - бычья
-        - тело > avg_body * min_displacement_factor
-        """
+    def _has_bullish_displacement(self, candles: List[Candle], idx: int) -> bool:
+        """Проверка displacement для BOS UP"""
         c = candles[idx]
         if c.close <= c.open:
             return False
-        avg_body = self._avg_body(candles)
-        if avg_body <= 0:
+        avg_b = avg_body(candles)
+        if avg_b <= 0:
             return False
-        return (c.close - c.open) > avg_body * self.min_displacement_factor
+        return (c.close - c.open) > avg_b * self.min_displacement_factor
 
-    def _has_bearish_displacement(self, candles: List, idx: int) -> bool:
-        """
-        Аналогично для BOS DOWN
-        """
+    def _has_bearish_displacement(self, candles: List[Candle], idx: int) -> bool:
+        """Проверка displacement для BOS DOWN"""
         c = candles[idx]
         if c.close >= c.open:
             return False
-        avg_body = self._avg_body(candles)
-        if avg_body <= 0:
+        avg_b = avg_body(candles)
+        if avg_b <= 0:
             return False
-        return (c.open - c.close) > avg_body * self.min_displacement_factor
+        return (c.open - c.close) > avg_b * self.min_displacement_factor

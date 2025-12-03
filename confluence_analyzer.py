@@ -1,7 +1,11 @@
 # confluence_analyzer.py
+# ИСПРАВЛЕНО: Добавлены все необходимые импорты
 
 from dataclasses import dataclass
 from typing import List, Dict, Optional
+
+from analysis_interfaces import Zone, DetectionResult
+from data.data_interfaces import Candle
 
 
 @dataclass
@@ -20,6 +24,7 @@ class ConfluenceAnalyzer:
 
     def analyze_confluence(
             self,
+            symbol: str,
             detections: Dict[str, DetectionResult],
             candles: Dict[str, List[Candle]]
     ) -> List[ConfluenceScore]:
@@ -27,7 +32,11 @@ class ConfluenceAnalyzer:
         confluence_zones = []
 
         # Проверяем каждую зону на младшем TF
-        for zone_15m in detections.get("15m", DetectionResult([], None)).zones:
+        zones_15m = detections.get("15m", DetectionResult([], None)).zones
+        if not zones_15m:
+            return []
+
+        for zone_15m in zones_15m:
             score = 0
             aligned_tfs = ["15m"]
             factors = []
@@ -49,28 +58,30 @@ class ConfluenceAnalyzer:
                             factors.append(f"Type match on {tf}")
 
             # Проверяем расположение относительно ключевых уровней
-            current_price = candles["15m"][-1].close
+            if "15m" in candles and candles["15m"]:
+                current_price = candles["15m"][-1].close
 
-            # Зона у round number
-            if self._near_round_number(zone_15m):
-                score += 15
-                factors.append("Round number")
+                # Зона у round number
+                if self._near_round_number(zone_15m):
+                    score += 15
+                    factors.append("Round number")
 
-            # Зона у дневного high/low
-            daily_high = max(c.high for c in candles["1d"][-1:])
-            daily_low = min(c.low for c in candles["1d"][-1:])
+                # Зона у дневного high/low
+                if "1d" in candles and candles["1d"]:
+                    daily_high = max(c.high for c in candles["1d"][-1:])
+                    daily_low = min(c.low for c in candles["1d"][-1:])
 
-            if abs(zone_15m.high - daily_high) / daily_high < 0.001:
-                score += 20
-                factors.append("Daily high")
-            elif abs(zone_15m.low - daily_low) / daily_low < 0.001:
-                score += 20
-                factors.append("Daily low")
+                    if abs(zone_15m.high - daily_high) / daily_high < 0.001:
+                        score += 20
+                        factors.append("Daily high")
+                    elif abs(zone_15m.low - daily_low) / daily_low < 0.001:
+                        score += 20
+                        factors.append("Daily low")
 
-            if score >= 50:  # Минимальный порог
+            if score >= 30:  # Минимальный порог
                 confluence_zones.append(
                     ConfluenceScore(
-                        symbol="",
+                        symbol=symbol,
                         zone=zone_15m,
                         score=min(100, score),
                         timeframes_aligned=aligned_tfs,

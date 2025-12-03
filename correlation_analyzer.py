@@ -1,4 +1,12 @@
 # correlation_analyzer.py
+# ИСПРАВЛЕНО: Добавлены все необходимые импорты
+
+from typing import List, Dict, Tuple
+import numpy as np
+
+from analysis_interfaces import ChainSignal
+from data.data_interfaces import Candle
+
 
 class CorrelationAnalyzer:
     """
@@ -6,19 +14,17 @@ class CorrelationAnalyzer:
     """
 
     def __init__(self):
-        self.correlation_matrix = {}
+        self.correlation_matrix: Dict[str, float] = {}
         self.update_interval = 3600  # Обновляем каждый час
 
     def calculate_correlations(
             self,
             symbols: List[str],
             candles_data: Dict[str, List[Candle]]
-    ):
+    ) -> None:
         """
         Рассчитывает матрицу корреляций
         """
-        import numpy as np
-
         for sym1 in symbols:
             for sym2 in symbols:
                 if sym1 == sym2:
@@ -46,7 +52,7 @@ class CorrelationAnalyzer:
             self,
             new_signal: ChainSignal,
             active_signals: List[ChainSignal]
-    ) -> bool:
+    ) -> Tuple[bool, str]:
         """
         Проверяет конфликт с активными сигналами на коррелирующих парах
         """
@@ -58,12 +64,12 @@ class CorrelationAnalyzer:
             if corr > 0.7:
                 # Сигналы должны быть в одном направлении
                 if new_signal.direction != active.direction:
-                    return True  # Конфликт
+                    return True, f"Correlation conflict with {active.symbol}"
 
             # Высокая отрицательная корреляция
             elif corr < -0.7:
                 # Сигналы должны быть в противоположных направлениях
                 if new_signal.direction == active.direction:
-                    return True  # Конфликт
+                    return True, f"Inverse correlation conflict with {active.symbol}"
 
-        return False
+        return False, "OK"
