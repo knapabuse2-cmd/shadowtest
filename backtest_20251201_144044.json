@@ -1,0 +1,1172 @@
+{
+  "timestamp": "2025-12-01T14:40:44.821158",
+  "report": {
+    "total": 49,
+    "winrate": 40.816326530612244,
+    "pnl": 23.639750086370793,
+    "pf": 1.8151637960817515,
+    "dd": 7.0
+  },
+  "trades": [
+    {
+      "symbol": "BTC/USDT",
+      "chain": "3.2",
+      "dir": "SHORT",
+      "entry": 87382.78,
+      "sl": 88375.86707142857,
+      "rr": 1.8881828733331538,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "BTC/USDT",
+      "chain": "1.5",
+      "dir": "SHORT",
+      "entry": 85034.945,
+      "sl": 85987.51264285714,
+      "rr": 3.858126460760575,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "BTC/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 86535.9346,
+      "sl": 84869.40085714286,
+      "rr": 1.5041612033023772,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "BTC/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 91079.1104,
+      "sl": 89257.528192,
+      "rr": 3.4829224682457833,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "BTC/USDT",
+      "chain": "1.5",
+      "dir": "LONG",
+      "entry": 88601.03,
+      "sl": 86829.0094,
+      "rr": 2.496892530481863,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "ETH/USDT",
+      "chain": "2.6",
+      "dir": "SHORT",
+      "entry": 2855.1899999999996,
+      "sl": 2889.1406428571427,
+      "rr": 1.5565242820985639,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "ETH/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 2812.0751999999998,
+      "sl": 2755.8336959999997,
+      "rr": 2.943018735772078,
+      "status": "CLOSED_TP",
+      "pnl": 2.943018735772078
+    },
+    {
+      "symbol": "ETH/USDT",
+      "chain": "3.2",
+      "dir": "SHORT",
+      "entry": 2814.5699999999997,
+      "sl": 2854.1377142857145,
+      "rr": 1.9670077335778522,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "ETH/USDT",
+      "chain": "2.6",
+      "dir": "LONG",
+      "entry": 2939.24,
+      "sl": 2903.0317857142854,
+      "rr": 1.5709734373612878,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "ETH/USDT",
+      "chain": "2.6",
+      "dir": "LONG",
+      "entry": 3062.45,
+      "sl": 3031.3295714285714,
+      "rr": 1.581092805369007,
+      "status": "CLOSED_TP",
+      "pnl": 1.581092805369007
+    },
+    {
+      "symbol": "ETH/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 3005.6227999999996,
+      "sl": 2970.238285714286,
+      "rr": 8.720119697236608,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "BCH/USDT",
+      "chain": "2.6",
+      "dir": "SHORT",
+      "entry": 545.8499999999999,
+      "sl": 553.3514285714285,
+      "rr": 2.8994477242429677,
+      "status": "CLOSED_TP",
+      "pnl": 2.8994477242429677
+    },
+    {
+      "symbol": "BCH/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 543.3820000000001,
+      "sl": 532.51436,
+      "rr": 5.353376761520548,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "BCH/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 522.938,
+      "sl": 513.4928571428571,
+      "rr": 2.192873132070917,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "BNB/USDT",
+      "chain": "1.5",
+      "dir": "SHORT",
+      "entry": 847.685,
+      "sl": 858.8335714285714,
+      "rr": 3.8960789338800486,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "BNB/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 848.7956,
+      "sl": 831.819688,
+      "rr": 2.2080934444052227,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "BNB/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 893.2002,
+      "sl": 880.1451428571428,
+      "rr": 2.33432911602946,
+      "status": "CLOSED_TP",
+      "pnl": 2.33432911602946
+    },
+    {
+      "symbol": "BNB/USDT",
+      "chain": "1.5",
+      "dir": "LONG",
+      "entry": 878.75,
+      "sl": 861.175,
+      "rr": 2.556187766714073,
+      "status": "CLOSED_TP",
+      "pnl": 2.556187766714073
+    },
+    {
+      "symbol": "BNB/USDT",
+      "chain": "1.5",
+      "dir": "LONG",
+      "entry": 886.27,
+      "sl": 871.2405714285715,
+      "rr": 3.6099176853031305,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "ADA/USDT",
+      "chain": "1.5",
+      "dir": "SHORT",
+      "entry": 0.4213,
+      "sl": 0.429726,
+      "rr": 3.6163575328066195,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "ADA/USDT",
+      "chain": "1.4",
+      "dir": "SHORT",
+      "entry": 0.4103,
+      "sl": 0.41482857142857144,
+      "rr": 2.2712933753943174,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "ADA/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 0.424794,
+      "sl": 0.4188607142857143,
+      "rr": 1.7875424361351275,
+      "status": "CLOSED_TP",
+      "pnl": 1.7875424361351275
+    },
+    {
+      "symbol": "ADA/USDT",
+      "chain": "2.6",
+      "dir": "LONG",
+      "entry": 0.43245,
+      "sl": 0.42808357142857145,
+      "rr": 1.8697857026010158,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "ADA/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 0.416856,
+      "sl": 0.40851888000000003,
+      "rr": 1.5465772353042775,
+      "status": "CLOSED_TP",
+      "pnl": 1.5465772353042775
+    },
+    {
+      "symbol": "ADA/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 0.414292,
+      "sl": 0.4089335714285714,
+      "rr": 2.8848009810978508,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "ADA/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 0.417854,
+      "sl": 0.40949692,
+      "rr": 6.760255974574837,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "ADA/USDT",
+      "chain": "1.5",
+      "dir": "SHORT",
+      "entry": 0.40165,
+      "sl": 0.409683,
+      "rr": 3.2330920666536227,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "ATOM/USDT",
+      "chain": "1.5",
+      "dir": "SHORT",
+      "entry": 2.4669999999999996,
+      "sl": 2.5163399999999996,
+      "rr": 3.2312235798251208,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "ATOM/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 2.42368,
+      "sl": 2.3752064,
+      "rr": 4.173818325851603,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "ATOM/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 2.4647200000000002,
+      "sl": 2.421264285714286,
+      "rr": 5.207140274170729,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "ATOM/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 2.45322,
+      "sl": 2.4206714285714286,
+      "rr": 5.308374297752816,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "ATOM/USDT",
+      "chain": "1.5",
+      "dir": "SHORT",
+      "entry": 2.3360000000000003,
+      "sl": 2.3827200000000004,
+      "rr": 2.6831580234833576,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "APT/USDT",
+      "chain": "1.4",
+      "dir": "SHORT",
+      "entry": 2.347,
+      "sl": 2.3812142857142855,
+      "rr": 1.8162839248434375,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "APT/USDT",
+      "chain": "1.4",
+      "dir": "SHORT",
+      "entry": 2.3355,
+      "sl": 2.3671928571428573,
+      "rr": 1.9540229885057483,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "APT/USDT",
+      "chain": "1.1",
+      "dir": "LONG",
+      "entry": 2.347,
+      "sl": 2.3197857142857146,
+      "rr": 2.283464566929164,
+      "status": "CLOSED_TP",
+      "pnl": 2.283464566929164
+    },
+    {
+      "symbol": "APT/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 2.28102,
+      "sl": 2.2353996,
+      "rr": 3.123164198472627,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "APT/USDT",
+      "chain": "2.6",
+      "dir": "SHORT",
+      "entry": 2.3129999999999997,
+      "sl": 2.3380071428571427,
+      "rr": 1.6023993144815747,
+      "status": "CLOSED_TP",
+      "pnl": 1.6023993144815747
+    },
+    {
+      "symbol": "APT/USDT",
+      "chain": "1.4",
+      "dir": "SHORT",
+      "entry": 2.2350000000000003,
+      "sl": 2.2671285714285716,
+      "rr": 1.9075144508670638,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "APT/USDT",
+      "chain": "1.4",
+      "dir": "SHORT",
+      "entry": 2.2255000000000003,
+      "sl": 2.26,
+      "rr": 1.739130434782634,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "APT/USDT",
+      "chain": "1.1",
+      "dir": "LONG",
+      "entry": 2.226,
+      "sl": 2.195535714285714,
+      "rr": 1.5920281359906074,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "APT/USDT",
+      "chain": "2.6",
+      "dir": "LONG",
+      "entry": 2.273,
+      "sl": 2.2438714285714285,
+      "rr": 3.3987248651299353,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "APT/USDT",
+      "chain": "1.4",
+      "dir": "SHORT",
+      "entry": 2.226,
+      "sl": 2.2597428571428573,
+      "rr": 1.701947502116841,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "APT/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 2.23406,
+      "sl": 2.1893788,
+      "rr": 3.2102987386193846,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "APT/USDT",
+      "chain": "1.4",
+      "dir": "SHORT",
+      "entry": 2.2015000000000002,
+      "sl": 2.2328714285714284,
+      "rr": 1.8715846994535765,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "APT/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 2.26296,
+      "sl": 2.2177008000000002,
+      "rr": 3.547124120620786,
+      "status": "CLOSED_TP",
+      "pnl": 3.547124120620786
+    },
+    {
+      "symbol": "APT/USDT",
+      "chain": "1.5",
+      "dir": "SHORT",
+      "entry": 2.247,
+      "sl": 2.29194,
+      "rr": 4.801640282281143,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "APT/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 2.20046,
+      "sl": 2.1738285714285714,
+      "rr": 2.8928226585130195,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "APT/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 2.2593,
+      "sl": 2.214114,
+      "rr": 3.633868897446091,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "APT/USDT",
+      "chain": "1.3",
+      "dir": "LONG",
+      "entry": 2.0355,
+      "sl": 2.014307142857143,
+      "rr": 3.3029996629592864,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "APT/USDT",
+      "chain": "1.5",
+      "dir": "SHORT",
+      "entry": 2.051,
+      "sl": 2.09202,
+      "rr": 4.393327296789016,
+      "status": "CLOSED_TP",
+      "pnl": 4.393327296789016
+    },
+    {
+      "symbol": "APT/USDT",
+      "chain": "1.5",
+      "dir": "SHORT",
+      "entry": 1.9225,
+      "sl": 1.9609500000000002,
+      "rr": 4.101801969162155,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "ARB/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 0.202112,
+      "sl": 0.19806976,
+      "rr": 3.7944308106396405,
+      "status": "CLOSED_TP",
+      "pnl": 3.7944308106396405
+    },
+    {
+      "symbol": "ARB/USDT",
+      "chain": "2.6",
+      "dir": "LONG",
+      "entry": 0.21710000000000002,
+      "sl": 0.21459928571428571,
+      "rr": 1.6023993144815747,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "ARB/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 0.217868,
+      "sl": 0.21351064,
+      "rr": 15.681972570547288,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "ARB/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 0.214566,
+      "sl": 0.21027468000000002,
+      "rr": 4.447116504944876,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "ARB/USDT",
+      "chain": "1.5",
+      "dir": "SHORT",
+      "entry": 0.20425,
+      "sl": 0.208335,
+      "rr": 3.5355831439062735,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "ARB/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 0.20444400000000001,
+      "sl": 0.20035512000000003,
+      "rr": 2.0191348242061413,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "AVAX/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 13.8758,
+      "sl": 13.624142857142857,
+      "rr": 10.070049954586743,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "AVAX/USDT",
+      "chain": "1.5",
+      "dir": "LONG",
+      "entry": 14.75,
+      "sl": 14.455,
+      "rr": 9.508474576271189,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "AVAX/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 14.7778,
+      "sl": 14.482244,
+      "rr": 5.522472898537008,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "AVAX/USDT",
+      "chain": "1.5",
+      "dir": "SHORT",
+      "entry": 13.379999999999999,
+      "sl": 13.647599999999999,
+      "rr": 3.3792440743113428,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "DOT/USDT",
+      "chain": "2.6",
+      "dir": "SHORT",
+      "entry": 2.2779999999999996,
+      "sl": 2.302821428571429,
+      "rr": 1.9424460431654191,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "DOT/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 2.28582,
+      "sl": 2.2401036000000003,
+      "rr": 4.236554059374757,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "DOT/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 2.26866,
+      "sl": 2.2239785714285714,
+      "rr": 4.718739009495769,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "DOT/USDT",
+      "chain": "2.6",
+      "dir": "LONG",
+      "entry": 2.2755,
+      "sl": 2.243114285714286,
+      "rr": 1.52845169827967,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "DOT/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 2.2256,
+      "sl": 2.181088,
+      "rr": 2.4689971243709428,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "DOT/USDT",
+      "chain": "1.5",
+      "dir": "SHORT",
+      "entry": 2.292,
+      "sl": 2.33784,
+      "rr": 4.249252056843667,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "DOT/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 2.29072,
+      "sl": 2.2449056,
+      "rr": 9.675560522455864,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "DOT/USDT",
+      "chain": "2.6",
+      "dir": "SHORT",
+      "entry": 2.297,
+      "sl": 2.323314285714286,
+      "rr": 2.0195439739413756,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "DOT/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 2.2845999999999997,
+      "sl": 2.238908,
+      "rr": 4.265516939508026,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "DOT/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 2.31154,
+      "sl": 2.2798857142857143,
+      "rr": 3.7423052622077972,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "DOT/USDT",
+      "chain": "1.5",
+      "dir": "SHORT",
+      "entry": 2.1285,
+      "sl": 2.17107,
+      "rr": 3.1259438236182304,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "LINK/USDT",
+      "chain": "1.5",
+      "dir": "SHORT",
+      "entry": 12.61,
+      "sl": 12.8622,
+      "rr": 3.5770930100826996,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "LINK/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 12.4926,
+      "sl": 12.242747999999999,
+      "rr": 4.7123897347229455,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "LINK/USDT",
+      "chain": "2.6",
+      "dir": "LONG",
+      "entry": 13.01,
+      "sl": 12.861928571428573,
+      "rr": 1.8958031837916254,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "LINK/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 12.753,
+      "sl": 12.49794,
+      "rr": 3.5952324943150584,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "LINK/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 12.6926,
+      "sl": 12.449714285714286,
+      "rr": 4.024114810022346,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "LINK/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 12.9636,
+      "sl": 12.704328,
+      "rr": 12.675491375852424,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "LINK/USDT",
+      "chain": "2.6",
+      "dir": "SHORT",
+      "entry": 13.165,
+      "sl": 13.299142857142856,
+      "rr": 2.1725239616613488,
+      "status": "CLOSED_TP",
+      "pnl": 2.1725239616613488
+    },
+    {
+      "symbol": "LINK/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 13.060599999999999,
+      "sl": 12.845714285714285,
+      "rr": 2.8359260736604264,
+      "status": "CLOSED_TP",
+      "pnl": 2.8359260736604264
+    },
+    {
+      "symbol": "LINK/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 13.0272,
+      "sl": 12.8455,
+      "rr": 9.564116675839239,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "LINK/USDT",
+      "chain": "1.5",
+      "dir": "SHORT",
+      "entry": 12.605,
+      "sl": 12.8571,
+      "rr": 3.060010200033998,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "LTC/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 82.1034,
+      "sl": 80.461332,
+      "rr": 4.601880068304131,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "LTC/USDT",
+      "chain": "2.6",
+      "dir": "SHORT",
+      "entry": 83.86500000000001,
+      "sl": 85.01185714285715,
+      "rr": 1.8964872944693658,
+      "status": "CLOSED_TP",
+      "pnl": 1.8964872944693658
+    },
+    {
+      "symbol": "LTC/USDT",
+      "chain": "2.6",
+      "dir": "LONG",
+      "entry": 84.605,
+      "sl": 83.554,
+      "rr": 1.7697431018077983,
+      "status": "CLOSED_TP",
+      "pnl": 1.7697431018077983
+    },
+    {
+      "symbol": "LTC/USDT",
+      "chain": "1.4",
+      "dir": "LONG",
+      "entry": 86.66,
+      "sl": 85.73964285714285,
+      "rr": 1.8509895227008246,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "LTC/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 83.4012,
+      "sl": 81.733176,
+      "rr": 3.7522241886207777,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "LTC/USDT",
+      "chain": "1.4",
+      "dir": "LONG",
+      "entry": 83.91,
+      "sl": 82.91199999999999,
+      "rr": 2.399799599198396,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "LTC/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 83.8318,
+      "sl": 82.82207142857143,
+      "rr": 3.568483750937325,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "LTC/USDT",
+      "chain": "2.6",
+      "dir": "LONG",
+      "entry": 86.215,
+      "sl": 85.31671428571428,
+      "rr": 1.5585241730279706,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "LTC/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 84.82000000000001,
+      "sl": 83.12360000000001,
+      "rr": 5.617778825748647,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "LTC/USDT",
+      "chain": "1.4",
+      "dir": "SHORT",
+      "entry": 79.02,
+      "sl": 80.18007142857144,
+      "rr": 2.155655439935936,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "LTC/USDT",
+      "chain": "1.5",
+      "dir": "SHORT",
+      "entry": 80.21000000000001,
+      "sl": 81.81420000000001,
+      "rr": 2.505921954868459,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "LTC/USDT",
+      "chain": "1.3",
+      "dir": "LONG",
+      "entry": 79.02,
+      "sl": 77.73478571428572,
+      "rr": 3.159006280220113,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "NEAR/USDT",
+      "chain": "1.4",
+      "dir": "SHORT",
+      "entry": 1.842,
+      "sl": 1.862007142857143,
+      "rr": 2.002856122813276,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "NEAR/USDT",
+      "chain": "1.1",
+      "dir": "LONG",
+      "entry": 1.904,
+      "sl": 1.871342857142857,
+      "rr": 2.6509186351706022,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "NEAR/USDT",
+      "chain": "1.3",
+      "dir": "LONG",
+      "entry": 1.904,
+      "sl": 1.871342857142857,
+      "rr": 2.6509186351706022,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "NEAR/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 1.83722,
+      "sl": 1.8004756000000002,
+      "rr": 4.7974657362754725,
+      "status": "CLOSED_TP",
+      "pnl": 4.7974657362754725
+    },
+    {
+      "symbol": "NEAR/USDT",
+      "chain": "1.4",
+      "dir": "SHORT",
+      "entry": 1.904,
+      "sl": 1.9420799999999998,
+      "rr": 1.943277310924371,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "NEAR/USDT",
+      "chain": "1.1",
+      "dir": "LONG",
+      "entry": 1.944,
+      "sl": 1.9168214285714287,
+      "rr": 1.5374507227332637,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "NEAR/USDT",
+      "chain": "1.3",
+      "dir": "LONG",
+      "entry": 1.944,
+      "sl": 1.9168214285714287,
+      "rr": 1.5374507227332637,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "NEAR/USDT",
+      "chain": "1.5",
+      "dir": "SHORT",
+      "entry": 1.8835,
+      "sl": 1.92117,
+      "rr": 1.5131404300504327,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "NEAR/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 1.85818,
+      "sl": 1.8210164,
+      "rr": 1.8518119880743569,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "NEAR/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 1.88506,
+      "sl": 1.8473587999999999,
+      "rr": 2.624319650302902,
+      "status": "CLOSED_TP",
+      "pnl": 2.624319650302902
+    },
+    {
+      "symbol": "NEAR/USDT",
+      "chain": "2.6",
+      "dir": "LONG",
+      "entry": 1.9005,
+      "sl": 1.8732857142857142,
+      "rr": 1.7322834645669205,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "NEAR/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 1.84118,
+      "sl": 1.8046928571428573,
+      "rr": 2.3520613914882045,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "NEAR/USDT",
+      "chain": "1.4",
+      "dir": "SHORT",
+      "entry": 1.8455,
+      "sl": 1.8672071428571428,
+      "rr": 2.398815399802558,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "NEAR/USDT",
+      "chain": "2.6",
+      "dir": "SHORT",
+      "entry": 1.8925,
+      "sl": 1.9114499999999999,
+      "rr": 3.2981530343008263,
+      "status": "CLOSED_TP",
+      "pnl": 3.2981530343008263
+    },
+    {
+      "symbol": "NEAR/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 1.87228,
+      "sl": 1.8348343999999999,
+      "rr": 2.983528104770649,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "NEAR/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 1.88354,
+      "sl": 1.8544357142857144,
+      "rr": 2.094536887056412,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "NEAR/USDT",
+      "chain": "1.5",
+      "dir": "SHORT",
+      "entry": 1.7429999999999999,
+      "sl": 1.7778599999999998,
+      "rr": 3.5775756085566885,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "NEAR/USDT",
+      "chain": "3.2",
+      "dir": "LONG",
+      "entry": 1.887,
+      "sl": 1.861557142857143,
+      "rr": 2.1392476137001744,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "SOL/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 131.6794,
+      "sl": 129.04581199999998,
+      "rr": 3.123343514627195,
+      "status": "CLOSED_SL",
+      "pnl": -1.0
+    },
+    {
+      "symbol": "SOL/USDT",
+      "chain": "1.1",
+      "dir": "LONG",
+      "entry": 132.27499999999998,
+      "sl": 130.82307142857144,
+      "rr": 1.976189304865481,
+      "status": "CLOSED_TP",
+      "pnl": 1.976189304865481
+    },
+    {
+      "symbol": "SOL/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 136.3432,
+      "sl": 134.59485714285714,
+      "rr": 4.059158059877105,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    },
+    {
+      "symbol": "SOL/USDT",
+      "chain": "Signal_1",
+      "dir": "LONG",
+      "entry": 139.4102,
+      "sl": 137.86485714285715,
+      "rr": 2.6077061031301407,
+      "status": "CANCELLED",
+      "pnl": 0.0
+    }
+  ]
+}
