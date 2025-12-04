@@ -1,4 +1,5 @@
 # config_and_main.py - ОБНОВЛЁННАЯ ВЕРСИЯ С ПОДДЕРЖКОЙ TP2, БУ, RR
+# ИСПРАВЛЕНО: Баг с использованием sig вне цикла (~строка 380)
 
 import asyncio
 import time
@@ -848,31 +849,45 @@ async def main():
 
                             signals = performance_checked
 
-                        if signals and candles_dict.get(signals[0].tf if signals else "15m"):
+                        # ---------------------------------------
+                        # 5) РАСШИРЕННАЯ ФИЛЬТРАЦИЯ (ИСПРАВЛЕНО!)
+                        # ---------------------------------------
+                        if signals:
                             advanced_filtered = []
                             for sig in signals:
+                                # ИСПРАВЛЕНО: Получаем свечи для TF ТЕКУЩЕГО сигнала
+                                sig_candles = candles_dict.get(sig.tf, [])
+                                if not sig_candles:
+                                    # Пропускаем фильтр если нет свечей для этого TF
+                                    advanced_filtered.append(sig)
+                                    continue
+
+                                # Получаем зоны для текущего TF
                                 current_zones = detections.get(sig.tf, DetectionResult([], None)).zones
 
+                                # Проверка возраста зон
                                 passed, reason = advanced_filter.filter_by_zone_age(
                                     sig,
                                     current_zones,
-                                    candles_dict.get(sig.tf, [])
+                                    sig_candles
                                 )
                                 if not passed:
                                     print(f"    ✗ {sig.chain_id} - {reason}")
                                     continue
 
+                                # Проверка momentum
                                 passed, reason = advanced_filter.filter_by_momentum(
                                     sig,
-                                    candles_dict.get(sig.tf, [])
+                                    sig_candles
                                 )
                                 if not passed:
                                     print(f"    ✗ {sig.chain_id} - {reason}")
                                     continue
 
+                                # Проверка волатильности
                                 passed, reason = advanced_filter.filter_by_volatility(
                                     sig,
-                                    candles_dict.get(sig.tf, [])
+                                    sig_candles
                                 )
                                 if not passed:
                                     print(f"    ✗ {sig.chain_id} - {reason}")
